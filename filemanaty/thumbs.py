@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import secrets
 from pathlib import Path, PurePosixPath
 
 from PIL import Image, UnidentifiedImageError
@@ -51,3 +52,14 @@ def cache_key(root_id: str, rel_path: str, mtime_ns: int, max_dimension: int) ->
 def cache_path(cache_dir: Path, key: str) -> Path:
     """Return the on-disk filename for a thumbnail with the given cache key."""
     return cache_dir / f"{key}.webp"
+
+
+def tmp_cache_path(cache_dir: Path, key: str) -> Path:
+    """A unique temp path for staging a thumbnail before atomic .replace().
+
+    The random suffix (not the PID) is what makes this unique: two concurrent
+    requests for the same uncached thumbnail run in the same process, so a
+    PID-based name would collide and the two writers would corrupt each other's
+    bytes before the swap. The final .replace() is atomic regardless.
+    """
+    return cache_dir / f"{key}.{secrets.token_hex(4)}.tmp"

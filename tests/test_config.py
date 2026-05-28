@@ -68,6 +68,45 @@ def test_load_valid_json_config(tmp_path):
     assert cfg.thumbnails.max_dimension == 128
 
 
+def test_roots_are_writable_by_default(tmp_path):
+    """A root with no 'writable' key is writable (preserves v0.2.0 behavior)."""
+    custom = tmp_path / "custom"
+    custom.mkdir()
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps(
+        {"roots": [{"id": "custom", "label": "Custom", "path": str(custom)}]}))
+
+    cfg = load_config(config_path=config_file, default_output_dir=tmp_path, default_input_dir=tmp_path)
+    assert cfg.roots[0].writable is True
+
+
+def test_root_writable_false_is_respected(tmp_path):
+    """A root may be marked read-only with 'writable': false."""
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    rw = tmp_path / "rw"
+    rw.mkdir()
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({"roots": [
+        {"id": "ro", "label": "RO", "path": str(ro), "writable": False},
+        {"id": "rw", "label": "RW", "path": str(rw), "writable": True},
+    ]}))
+
+    cfg = load_config(config_path=config_file, default_output_dir=tmp_path, default_input_dir=tmp_path)
+    by_id = {r.id: r for r in cfg.roots}
+    assert by_id["ro"].writable is False
+    assert by_id["rw"].writable is True
+
+
+def test_default_config_roots_are_writable(tmp_path):
+    """Auto-mounted output/input roots are writable."""
+    (tmp_path / "o").mkdir()
+    (tmp_path / "i").mkdir()
+    cfg = load_config(config_path=tmp_path / "nope.json",
+                      default_output_dir=tmp_path / "o", default_input_dir=tmp_path / "i")
+    assert all(r.writable for r in cfg.roots)
+
+
 def test_malformed_json_falls_back_to_defaults(tmp_path, caplog):
     outputs = tmp_path / "outputs"; outputs.mkdir()
     cfg_file = tmp_path / "config.json"

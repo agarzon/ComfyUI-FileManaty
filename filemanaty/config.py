@@ -29,6 +29,7 @@ class RootConfig:
     id: str
     label: str
     path: Path
+    writable: bool = True
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,8 @@ def _parse_config(raw: dict) -> Config:
         if not resolved.is_dir():
             raise _ConfigError(f"root path is not a directory: {path_str!r}")
         seen_ids.add(rid)
-        roots.append(RootConfig(id=rid, label=label, path=resolved))
+        writable = bool(entry.get("writable", True))
+        roots.append(RootConfig(id=rid, label=label, path=resolved, writable=writable))
 
     files_raw = raw.get("files", {})
     if not isinstance(files_raw, dict):

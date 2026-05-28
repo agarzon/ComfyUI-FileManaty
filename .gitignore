@@ -26,6 +26,9 @@ config.json
 thumbnail_cache/
 
 
+# Playwright MCP smoke-test output
+.playwright-mcp/
+
 # Claude Code (local only)
 .claude/
 

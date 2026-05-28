@@ -28,6 +28,7 @@ Schema:
 |---|---|---|---|
 | `roots[]` | yes | auto-mount input + output | Each root has `id`, `label`, `path` (absolute) |
 | `roots[].id` | yes | — | Matches `^[a-z0-9_-]{1,32}$`, unique |
+| `roots[].writable` | no | `true` | Set `false` for a browse-only root; the server rejects all write operations and the UI disables write actions |
 | `files.allow_hidden` | no | `false` | Show dotfiles in listings |
 | `files.image_extensions` | no | png/jpg/jpeg/webp/gif/bmp/avif | Lowercase, dot-prefixed |
 | `thumbnails.enabled` | no | `true` | Disable to skip thumbnail generation |
@@ -44,6 +45,11 @@ non-local exposure.
 
 - `write.max_upload_mb` (default `1024`): maximum size per uploaded file, in
   megabytes.
+- `roots[].writable` (default `true`): set `false` to mount a root browse-only.
+  Every mutating endpoint (mkdir, rename, delete, copy, move, upload, trash
+  restore/purge) is rejected server-side with `403 READ_ONLY`, and the toolbar
+  disables its write buttons. Copying *out of* a read-only root into a writable
+  one is still allowed; moving out of it is not (a move deletes the source).
 
 Deleted items go to a hidden `.filemanaty_trash/` folder inside each root
 and can be restored from the Trash view; `Shift+Delete` deletes permanently.

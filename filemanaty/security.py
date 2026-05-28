@@ -20,6 +20,15 @@ class UnsafeNameError(PathEscapeError):
 
 _UNSAFE_NAME_CHARS = frozenset("/\\\x00")
 
+# Reserved DOS device names. On Windows a file/dir named after one of these
+# (with or without an extension, any case) is inaccessible or hangs. We reject
+# them everywhere so the same tree stays portable across platforms.
+_WINDOWS_RESERVED = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+)
+
 
 def safe_name(name: str, *, allow_hidden: bool = False) -> str:
     """Validate a single new path component (file/folder name).
@@ -36,6 +45,8 @@ def safe_name(name: str, *, allow_hidden: bool = False) -> str:
         raise UnsafeNameError(f"hidden name not allowed: {name!r}")
     if name != name.strip() or name.endswith("."):
         raise UnsafeNameError(f"name has leading/trailing whitespace or trailing dot: {name!r}")
+    if name.split(".", 1)[0].upper() in _WINDOWS_RESERVED:
+        raise UnsafeNameError(f"reserved device name not allowed: {name!r}")
     return name
 
 

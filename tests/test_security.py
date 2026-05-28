@@ -162,3 +162,22 @@ def test_safe_name_allows_hidden_when_opted_in():
 def test_safe_name_rejects_windows_hostile(bad):
     with pytest.raises(UnsafeNameError):
         safe_name(bad)
+
+
+@pytest.mark.parametrize("bad", [
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM9", "LPT1", "LPT9",
+    "con", "Nul", "cOm1",            # case-insensitive
+    "CON.txt", "nul.tar.gz", "LPT1.log",  # reserved stem with extension
+])
+def test_safe_name_rejects_windows_reserved_device_names(bad):
+    with pytest.raises(UnsafeNameError):
+        safe_name(bad)
+
+
+@pytest.mark.parametrize("ok", [
+    "CONSOLE", "CONfig.txt", "COM", "COM10", "LPT0",
+    "PRNT", "scon", "NULL", "my-CON-file",
+])
+def test_safe_name_allows_names_that_merely_contain_reserved_words(ok):
+    assert safe_name(ok) == ok

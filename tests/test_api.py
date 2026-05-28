@@ -54,13 +54,41 @@ def two_root_client(aiohttp_client, tmp_root, tmp_root2, tmp_path_factory, monke
     return _make
 
 
+@pytest.fixture
+def ro_rw_client(aiohttp_client, tmp_root, tmp_root2, tmp_path_factory, monkeypatch):
+    """Two roots: 'ro' is read-only, 'rw' is writable. For read-only enforcement."""
+    async def _make():
+        cfg = Config(
+            roots=(
+                RootConfig(id="ro", label="RO", path=tmp_root.resolve(), writable=False),
+                RootConfig(id="rw", label="RW", path=tmp_root2.resolve(), writable=True),
+            ),
+            files=FilesConfig(),
+            thumbnails=ThumbnailsConfig(),
+        )
+        monkeypatch.setattr(api_module, "_get_config", lambda: cfg)
+        monkeypatch.setenv("FILEMANATY_CACHE_DIR", str(tmp_path_factory.mktemp("cache")))
+        app = web.Application()
+        api_module.attach_routes(app)
+        return await aiohttp_client(app)
+    return _make
+
+
 async def test_roots_endpoint(client_factory):
     client = await client_factory()
     resp = await client.get("/filemanaty/api/v1/roots")
     assert resp.status == 200
     body = await resp.json()
     assert body["ok"] is True
-    assert body["data"]["roots"] == [{"id": "t", "label": "T"}]
+    assert body["data"]["roots"] == [{"id": "t", "label": "T", "writable": True}]
+
+
+async def test_roots_endpoint_exposes_read_only(ro_rw_client):
+    client = await ro_rw_client()
+    resp = await client.get("/filemanaty/api/v1/roots")
+    by_id = {r["id"]: r for r in (await resp.json())["data"]["roots"]}
+    assert by_id["ro"]["writable"] is False
+    assert by_id["rw"]["writable"] is True
 
 
 async def test_list_root_returns_top_level(client_factory):
@@ -930,3 +958,95 @@ async def test_restore_duplicate_targets_keep_both_409(client_factory):
     resp = await _post(client, "/filemanaty/api/v1/trash/restore",
                        {"root": "t", "ids": [tid1, tid2], "on_conflict": "keep_both"})
     assert resp.status == 409
+
+
+# ---------------------------------------------------------------------------
+# Read-only root enforcement (B3)
+# ---------------------------------------------------------------------------
+
+async def test_ro_mkdir_rejected(ro_rw_client):
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/mkdir", {"root": "ro", "path": "", "name": "fresh"})
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_ro_rename_rejected(ro_rw_client):
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/rename", {"root": "ro", "path": "top.txt", "name": "x.txt"})
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_ro_delete_rejected(ro_rw_client):
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/delete", {"root": "ro", "items": ["top.txt"]})
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_ro_upload_rejected(ro_rw_client):
+    client = await ro_rw_client()
+    form = FormData()
+    form.add_field("root", "ro"); form.add_field("path", "")
+    form.add_field("file", b"x", filename="new.txt", content_type="application/octet-stream")
+    resp = await client.post("/filemanaty/api/v1/upload", data=form)
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_ro_copy_into_readonly_dst_rejected(ro_rw_client):
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/copy", {
+        "src_root": "rw", "src_items": ["existing.txt"], "dst_root": "ro", "dst_path": ""})
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_ro_copy_from_readonly_src_allowed(ro_rw_client):
+    """Copying OUT of a read-only root is fine — the source is only read."""
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/copy", {
+        "src_root": "ro", "src_items": ["top.txt"], "dst_root": "rw", "dst_path": ""})
+    assert resp.status == 200
+    dst = await client.get("/filemanaty/api/v1/list?root=rw&path=")
+    assert "top.txt" in [e["name"] for e in (await dst.json())["data"]["entries"]]
+
+
+async def test_ro_move_out_of_readonly_src_rejected(ro_rw_client):
+    """Moving OUT of a read-only root removes from it — a write — so reject."""
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/move", {
+        "src_root": "ro", "src_items": ["top.txt"], "dst_root": "rw", "dst_path": ""})
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_ro_move_into_readonly_dst_rejected(ro_rw_client):
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/move", {
+        "src_root": "rw", "src_items": ["existing.txt"], "dst_root": "ro", "dst_path": ""})
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_ro_trash_restore_rejected(ro_rw_client):
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/trash/restore", {"root": "ro", "ids": ["anything"]})
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_ro_trash_purge_rejected(ro_rw_client):
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/trash/purge", {"root": "ro", "all": True})
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "READ_ONLY"
+
+
+async def test_rw_root_still_writable(ro_rw_client):
+    """Regression: the writable root in the same config still accepts writes."""
+    client = await ro_rw_client()
+    resp = await _post(client, "/filemanaty/api/v1/mkdir", {"root": "rw", "path": "", "name": "fresh"})
+    assert resp.status == 200
+    assert (await resp.json())["ok"] is True

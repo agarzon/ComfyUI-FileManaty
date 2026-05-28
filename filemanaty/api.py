@@ -24,7 +24,7 @@ from filemanaty.config import Config, RootConfig, load_config
 from filemanaty.security import (
     PathEscapeError, has_hidden_component, safe_name, safe_resolve,
 )
-from filemanaty.thumbs import ThumbError, cache_key, cache_path, generate_thumbnail
+from filemanaty.thumbs import ThumbError, cache_key, cache_path, generate_thumbnail, tmp_cache_path
 
 log = logging.getLogger("filemanaty")
 
@@ -105,6 +105,13 @@ def _is_hidden(name: str) -> bool:
     return name.startswith(".")
 
 
+def _require_writable(root: RootConfig) -> Optional[web.Response]:
+    """Return a 403 response if ``root`` is configured read-only."""
+    if not root.writable:
+        return _err("READ_ONLY", f"root {root.id!r} is read-only", 403)
+    return None
+
+
 def _reject_hidden(target: Path, root_path: Path, cfg: Config) -> Optional[web.Response]:
     """Return a 403 response if the target sits under any hidden path component."""
     if cfg.files.allow_hidden:
@@ -116,7 +123,7 @@ def _reject_hidden(target: Path, root_path: Path, cfg: Config) -> Optional[web.R
 
 async def _roots(request: web.Request) -> web.Response:
     cfg = _get_config()
-    return _ok({"roots": [{"id": r.id, "label": r.label} for r in cfg.roots]})
+    return _ok({"roots": [{"id": r.id, "label": r.label, "writable": r.writable} for r in cfg.roots]})
 
 
 async def _list(request: web.Request) -> web.Response:
@@ -247,10 +254,10 @@ async def _thumbnail(request: web.Request) -> web.Response:
         return _err("THUMB_UNSUPPORTED", "could not generate thumbnail", 404)
 
     def store(payload: bytes) -> None:
-        # Per-request tmp name avoids two concurrent writers fighting over the
-        # same `<key>.webp.tmp`. Replace is atomic; if a second writer wins the
-        # race, the bytes are identical anyway.
-        tmp = cache_dir / f"{key}.{os.getpid()}.tmp"
+        # Unique per-call tmp name avoids two concurrent writers (same process)
+        # fighting over one temp file. Replace is atomic; if a second writer
+        # wins the race, the bytes are identical anyway.
+        tmp = tmp_cache_path(cache_dir, key)
         tmp.write_bytes(payload)
         tmp.replace(out_path)
 
@@ -347,6 +354,8 @@ async def _mkdir(request: web.Request) -> web.Response:
         safe_name(name, allow_hidden=cfg.files.allow_hidden)
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
+    if (resp := _require_writable(root)) is not None:
+        return resp
     if _is_trash_path(parent / name, root.path):
         return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
     if (resp := _reject_hidden(parent, root.path, cfg)) is not None:
@@ -391,6 +400,12 @@ async def _transfer(request: web.Request, *, move: bool) -> web.Response:
         srcs = [safe_resolve(src_root.path, _strip_path(s)) for s in src_items]
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
+    # Copy writes only to the destination; move also removes from the source,
+    # so a move out of a read-only root is itself a write to that root.
+    if (resp := _require_writable(dst_root)) is not None:
+        return resp
+    if move and (resp := _require_writable(src_root)) is not None:
+        return resp
     if not dst_dir.is_dir():
         return _err("BAD_REQUEST", "destination is not a directory", 400)
     if _is_trash_path(dst_dir, dst_root.path):
@@ -479,6 +494,8 @@ async def _delete(request: web.Request) -> web.Response:
         targets = [safe_resolve(root.path, _strip_path(s)) for s in items]
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
+    if (resp := _require_writable(root)) is not None:
+        return resp
     for t in targets:
         if t.resolve() == root.path.resolve():
             return _err("ACCESS_DENIED", "cannot delete a root", 403)
@@ -521,6 +538,8 @@ async def _rename(request: web.Request) -> web.Response:
         safe_name(name, allow_hidden=cfg.files.allow_hidden)
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
+    if (resp := _require_writable(root)) is not None:
+        return resp
     if src.resolve() == root.path.resolve():
         return _err("ACCESS_DENIED", "cannot rename a root", 403)
     if _is_trash_path(src, root.path) or _is_trash_path(src.parent / name, root.path):
@@ -576,6 +595,8 @@ async def _trash_restore(request: web.Request) -> web.Response:
             safe_name(tid)  # ids contain only digits, '-', hex — no separators/dots
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
+    if (resp := _require_writable(root)) is not None:
+        return resp
     ids = list(dict.fromkeys(ids))  # dedupe; a tid restored once must not be processed twice
 
     loop = asyncio.get_running_loop()
@@ -636,6 +657,8 @@ async def _trash_purge(request: web.Request) -> web.Response:
         root = _find_root(cfg, root_id)
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
+    if (resp := _require_writable(root)) is not None:
+        return resp
     loop = asyncio.get_running_loop()
     if purge_everything:
         await loop.run_in_executor(None, ops.purge_all, root.path)
@@ -680,6 +703,8 @@ async def _upload(request: web.Request) -> web.Response:
                 root, dst_dir = _resolve_dir(cfg, root_id, raw_path)
             except PathEscapeError as exc:
                 return _err("ACCESS_DENIED", str(exc), 403)
+            if (resp := _require_writable(root)) is not None:
+                return resp
             if _is_trash_path(dst_dir, root.path):
                 return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
             if (resp := _reject_hidden(dst_dir, root.path, cfg)) is not None:

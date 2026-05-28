@@ -109,8 +109,8 @@ export async function trashView(root, onChange) {
             };
             row.querySelector("[data-purge]").onclick = async () => {
                 if (!(await confirmDialog("Permanently delete?", it.original_name, { danger: true }))) return;
-                await purgeTrash(root, { ids: [it.id] });
-                await reload(); onChange && onChange();
+                try { await purgeTrash(root, { ids: [it.id] }); await reload(); onChange && onChange(); }
+                catch (e) { toast(e.message, "error"); }
             };
             listEl.appendChild(row);
         }
@@ -118,8 +118,8 @@ export async function trashView(root, onChange) {
 
     box.querySelector("#fm-trash-empty").onclick = async () => {
         if (!(await confirmDialog("Empty trash?", "All trashed items will be permanently deleted.", { danger: true }))) return;
-        await purgeTrash(root, { all: true });
-        await reload(); onChange && onChange();
+        try { await purgeTrash(root, { all: true }); await reload(); onChange && onChange(); }
+        catch (e) { toast(e.message, "error"); }
     };
     box.querySelector("#fm-trash-close").onclick = close;
     await reload();

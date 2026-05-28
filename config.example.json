@@ -8,7 +8,8 @@
     {
       "id": "inputs",
       "label": "Inputs",
-      "path": "/absolute/path/to/ComfyUI/input"
+      "path": "/absolute/path/to/ComfyUI/input",
+      "writable": false
     }
   ],
   "files": {

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from filemanaty.thumbs import generate_thumbnail, ThumbError, cache_key, cache_path
+from filemanaty.thumbs import generate_thumbnail, ThumbError, cache_key, cache_path, tmp_cache_path
 
 
 def _make_png(path: Path, size=(500, 300), color=(255, 0, 0)):
@@ -77,3 +77,17 @@ def test_cache_key_canonicalizes_dot_segments():
     a = cache_key("r", "sub/./img.png", 123, 320)
     b = cache_key("r", "sub/img.png", 123, 320)
     assert a == b
+
+
+def test_tmp_cache_path_is_unique_per_call(tmp_path):
+    """Two concurrent writers staging the same key must NOT share a temp path,
+    otherwise their writes interleave and corrupt the file before .replace()."""
+    a = tmp_cache_path(tmp_path, "abc123")
+    b = tmp_cache_path(tmp_path, "abc123")
+    assert a != b
+
+
+def test_tmp_cache_path_lives_in_cache_dir_and_differs_from_final(tmp_path):
+    tmp = tmp_cache_path(tmp_path, "abc123")
+    assert tmp.parent == tmp_path
+    assert tmp != cache_path(tmp_path, "abc123")

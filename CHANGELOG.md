@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.2.1 — 2026-05-28
+
+Hardening and UX polish on the v0.2.0 file manager.
+
+### Added
+
+- **Read-only roots.** A root may set `"writable": false` in `config.json` to be mounted browse-only. Every mutating endpoint (mkdir, rename, delete, copy/move destination, move source, upload, trash restore/purge) is rejected server-side with `403 READ_ONLY`, and the toolbar disables its write buttons for that root. Copying *out of* a read-only root is still allowed; moving out of it is not. The `/roots` response now includes each root's `writable` flag.
+
+### Fixed
+
+- **Thumbnail cache write race.** Concurrent requests for the same uncached thumbnail shared one temp file (named by PID, constant within the process) and could corrupt each other's bytes before the atomic swap. Each stage now uses a unique random temp name, matching the upload path.
+
+### Security
+
+- `safe_name()` now rejects Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`, case-insensitive, with or without an extension) so a tree created on Linux stays portable to Windows hosts.
+
+### Changed (frontend)
+
+- New Folder and Rename now route name collisions through the Replace / Keep both / Skip conflict dialog (previously a dead-end "already exists" toast).
+- Instant client-side feedback for the always-invalid name cases (slashes, trailing dot) before hitting the server.
+- Breadcrumb shows the root's configured label instead of its id.
+
+### Tests
+
+- Backend: 234 passing, 1 platform-conditional skip. Frontend verified by browser smoke testing (read-only button states, conflict dialog, name validation, breadcrumb label) in the Docker dev environment.
+
 ## v0.2.0 — 2026-05-28
 
 Turns the read-only viewer into a full Explorer-style file manager.

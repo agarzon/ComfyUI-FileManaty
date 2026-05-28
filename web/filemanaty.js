@@ -20,6 +20,22 @@ export function childPathOf(name) {
     return STATE.currentPath ? `${STATE.currentPath}/${name}` : name;
 }
 
+// Fast client-side feedback for the always-invalid cases. The backend remains
+// the authority and reports config-dependent rejections (hidden names when
+// allow_hidden is off, reserved device names, control chars) via its own error.
+export function validateName(name) {
+    if (name.includes("/") || name.includes("\\")) return "Name can’t contain a slash.";
+    if (name.endsWith(".")) return "Name can’t end with a dot.";
+    return null;
+}
+
+// Whether the currently-open root accepts writes (read-only roots disable
+// write actions in the toolbar). Defaults to writable if unknown.
+export function currentRootWritable() {
+    const r = STATE.roots.find((x) => x.id === STATE.currentRoot);
+    return r ? r.writable !== false : true;
+}
+
 export function selectedPaths() {
     return [...STATE.selected].map(childPathOf);
 }
@@ -231,8 +247,23 @@ export async function navigateTo(rootId, relPath) {
     STATE.anchorName = null;
     try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {}
     highlightTab();
+    updateWritableUI();
     renderTree().catch((e) => console.error("filemanaty tree render failed:", e));
     await refresh();
+}
+
+// Disable write actions in the toolbar when the current root is read-only.
+// (The backend enforces this regardless; this just avoids dead-end clicks.)
+function updateWritableUI() {
+    const writable = currentRootWritable();
+    const writeActs = new Set(["newfolder", "upload", "rename", "paste", "delete"]);
+    document.querySelectorAll("#fm-toolbar .fm-tb").forEach((b) => {
+        if (!writeActs.has(b.dataset.act)) return;
+        b.disabled = !writable;
+        b.style.opacity = writable ? "" : "0.4";
+        b.style.cursor = writable ? "pointer" : "not-allowed";
+        b.title = writable ? "" : "This root is read-only";
+    });
 }
 
 async function onToolbarAction(act) {
@@ -266,7 +297,10 @@ async function uploadFileList(files) {
 export async function actNewFolder() {
     const name = await promptText("New folder name");
     if (!name) return;
-    await apiMkdir(STATE.currentRoot, STATE.currentPath, name);
+    const err = validateName(name);
+    if (err) { toast(err, "error"); return; }
+    const r = await runWithConflicts((oc) => apiMkdir(STATE.currentRoot, STATE.currentPath, name, oc));
+    if (r === null) return;  // cancelled at conflict dialog
     await refresh();
     toast("Folder created", "success");
 }
@@ -276,7 +310,10 @@ export async function actRename() {
     const oldName = [...STATE.selected][0];
     const name = await promptText("Rename to", oldName);
     if (!name || name === oldName) return;
-    await apiRename(STATE.currentRoot, childPathOf(oldName), name);
+    const err = validateName(name);
+    if (err) { toast(err, "error"); return; }
+    const r = await runWithConflicts((oc) => apiRename(STATE.currentRoot, childPathOf(oldName), name, oc));
+    if (r === null) return;  // cancelled at conflict dialog
     await refresh();
     toast("Renamed", "success");
 }
@@ -307,6 +344,8 @@ export async function refresh() {
     if (!STATE.currentRoot) return;
     const { entries, path } = await fetchList(STATE.currentRoot, STATE.currentPath);
     STATE.entries = entries;
+    // Drop any selected names that no longer exist after the refresh.
+    STATE.selected = new Set([...STATE.selected].filter((n) => STATE.entries.some((e) => e.name === n)));
     renderBreadcrumb(path);
     renderGrid();
     renderPreview();
@@ -315,7 +354,8 @@ export async function refresh() {
 function renderBreadcrumb(path) {
     const el = document.getElementById("fm-breadcrumb");
     const segs = (path || "").split("/").filter(Boolean);
-    const parts = [`<a href="#" data-bc="" style="color:inherit;text-decoration:none">${escapeHtml(STATE.currentRoot)}</a>`];
+    const rootLabel = STATE.roots.find((r) => r.id === STATE.currentRoot)?.label || STATE.currentRoot;
+    const parts = [`<a href="#" data-bc="" style="color:inherit;text-decoration:none">${escapeHtml(rootLabel)}</a>`];
     let acc = "";
     for (const s of segs) {
         acc = acc ? `${acc}/${s}` : s;
@@ -333,11 +373,7 @@ function renderBreadcrumb(path) {
 function renderGrid() {
     const grid = document.getElementById("fm-grid");
     grid.innerHTML = "";
-    const sorted = [...STATE.entries].sort((a, b) => {
-        if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
-        return a.name.localeCompare(b.name);
-    });
-    for (const e of sorted) {
+    for (const e of sortedEntries()) {
         const cell = document.createElement("div");
         cell.dataset.name = e.name;
         cell.style.cssText = "position:relative;aspect-ratio:1;background:#222;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;";
