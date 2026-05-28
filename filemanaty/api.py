@@ -32,6 +32,23 @@ API_PREFIX = "/filemanaty/api/v1"
 MAX_LIST_ENTRIES = 5000
 _VALID_ON_CONFLICT = (None, "skip", "replace", "keep_both")
 
+
+def _parse_bool(raw: Optional[str], *, default: bool) -> Optional[bool]:
+    """Parse a query-param bool. Returns the bool, or None if ``raw`` is invalid.
+
+    Accepts (case-insensitive): "true", "false", "1", "0". Anything else => None.
+    A missing param (``raw is None``) returns ``default``.
+    """
+    if raw is None:
+        return default
+    lowered = raw.lower()
+    if lowered in ("true", "1"):
+        return True
+    if lowered in ("false", "0"):
+        return False
+    return None
+
+
 _config: Optional[Config] = None
 
 
@@ -112,10 +129,12 @@ def _require_writable(root: RootConfig) -> Optional[web.Response]:
     return None
 
 
-def _reject_hidden(target: Path, root_path: Path, cfg: Config) -> Optional[web.Response]:
-    """Return a 403 response if the target sits under any hidden path component."""
-    if cfg.files.allow_hidden:
-        return None
+def _reject_hidden(target: Path, root_path: Path) -> Optional[web.Response]:
+    """Return a 403 response if the target sits under any hidden path component.
+
+    This is defense-in-depth for non-listing endpoints. /list does its own
+    include_hidden-aware gating and bypasses this helper.
+    """
     if has_hidden_component(target, root_path):
         return _err("ACCESS_DENIED", "hidden files not allowed", 403)
     return None
@@ -132,6 +151,10 @@ async def _list(request: web.Request) -> web.Response:
     if root_id is None or raw_path is None:
         return _err("BAD_REQUEST", "missing 'root' or 'path' query param", 400)
 
+    include_hidden = _parse_bool(request.query.get("include_hidden"), default=False)
+    if include_hidden is None:
+        return _err("BAD_REQUEST", "invalid include_hidden value", 400)
+
     cfg = _get_config()
     try:
         root = _find_root(cfg, root_id)
@@ -139,7 +162,7 @@ async def _list(request: web.Request) -> web.Response:
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
 
-    if (resp := _reject_hidden(target, root.path, cfg)) is not None:
+    if not include_hidden and (resp := _reject_hidden(target, root.path)) is not None:
         return resp
 
     loop = asyncio.get_running_loop()
@@ -153,7 +176,7 @@ async def _list(request: web.Request) -> web.Response:
         out: list[dict[str, Any]] = []
         with os.scandir(target) as it:
             for entry in it:
-                if _is_hidden(entry.name) and not cfg.files.allow_hidden:
+                if _is_hidden(entry.name) and not include_hidden:
                     continue
                 if len(out) > MAX_LIST_ENTRIES:
                     break
@@ -205,8 +228,6 @@ async def _thumbnail(request: web.Request) -> web.Response:
         return _err("BAD_REQUEST", "missing 'root' or 'path' query param", 400)
 
     cfg = _get_config()
-    if not cfg.thumbnails.enabled:
-        return _err("NOT_FOUND", "thumbnails disabled by config", 404)
 
     try:
         rel = _strip_path(raw_path)
@@ -218,7 +239,7 @@ async def _thumbnail(request: web.Request) -> web.Response:
     if not target.is_file():
         return _err("NOT_FOUND", "no such file", 404)
 
-    if (resp := _reject_hidden(target, root.path, cfg)) is not None:
+    if (resp := _reject_hidden(target, root.path)) is not None:
         return resp
 
     if target.suffix.lower() not in cfg.files.image_extensions:
@@ -325,7 +346,7 @@ async def _file_endpoint(request: web.Request, *, attachment: bool) -> web.Respo
         return _err("ACCESS_DENIED", str(exc), 403)
     if not target.is_file():
         return _err("NOT_FOUND", "no such file", 404)
-    if (resp := _reject_hidden(target, root.path, cfg)) is not None:
+    if (resp := _reject_hidden(target, root.path)) is not None:
         return resp
     if not attachment and target.suffix.lower() not in cfg.files.image_extensions:
         return _err("PREVIEW_UNSUPPORTED", "preview is image-only in v1", 404)
@@ -351,14 +372,14 @@ async def _mkdir(request: web.Request) -> web.Response:
         return _err("BAD_REQUEST", "invalid on_conflict value", 400)
     try:
         root, parent = _resolve_dir(cfg, root_id, raw_path)
-        safe_name(name, allow_hidden=cfg.files.allow_hidden)
+        safe_name(name)
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
     if (resp := _require_writable(root)) is not None:
         return resp
     if _is_trash_path(parent / name, root.path):
         return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
-    if (resp := _reject_hidden(parent, root.path, cfg)) is not None:
+    if (resp := _reject_hidden(parent, root.path)) is not None:
         return resp
     if not parent.is_dir():
         return _err("BAD_REQUEST", "parent path is not a directory", 400)
@@ -410,12 +431,12 @@ async def _transfer(request: web.Request, *, move: bool) -> web.Response:
         return _err("BAD_REQUEST", "destination is not a directory", 400)
     if _is_trash_path(dst_dir, dst_root.path):
         return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
-    if (resp := _reject_hidden(dst_dir, dst_root.path, cfg)) is not None:
+    if (resp := _reject_hidden(dst_dir, dst_root.path)) is not None:
         return resp
     for src in srcs:
         if _is_trash_path(src, src_root.path):
             return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
-        if (resp := _reject_hidden(src, src_root.path, cfg)) is not None:
+        if (resp := _reject_hidden(src, src_root.path)) is not None:
             return resp
         if src.resolve() == src_root.path.resolve():
             return _err("ACCESS_DENIED", "cannot transfer a root", 403)
@@ -501,7 +522,7 @@ async def _delete(request: web.Request) -> web.Response:
             return _err("ACCESS_DENIED", "cannot delete a root", 403)
         if _is_trash_path(t, root.path):
             return _err("ACCESS_DENIED", "cannot delete the trash via /delete", 403)
-        if (resp := _reject_hidden(t, root.path, cfg)) is not None:
+        if (resp := _reject_hidden(t, root.path)) is not None:
             return resp
         if not t.exists():
             return _err("NOT_FOUND", f"no such item: {t.name}", 404)
@@ -535,7 +556,7 @@ async def _rename(request: web.Request) -> web.Response:
     try:
         root = _find_root(cfg, root_id)
         src = safe_resolve(root.path, _strip_path(raw_path))
-        safe_name(name, allow_hidden=cfg.files.allow_hidden)
+        safe_name(name)
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
     if (resp := _require_writable(root)) is not None:
@@ -546,7 +567,7 @@ async def _rename(request: web.Request) -> web.Response:
         return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
     if not src.exists():
         return _err("NOT_FOUND", "no such item", 404)
-    if (resp := _reject_hidden(src, root.path, cfg)) is not None:
+    if (resp := _reject_hidden(src, root.path)) is not None:
         return resp
 
     loop = asyncio.get_running_loop()
@@ -707,7 +728,7 @@ async def _upload(request: web.Request) -> web.Response:
                 return resp
             if _is_trash_path(dst_dir, root.path):
                 return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
-            if (resp := _reject_hidden(dst_dir, root.path, cfg)) is not None:
+            if (resp := _reject_hidden(dst_dir, root.path)) is not None:
                 return resp
             if not dst_dir.is_dir():
                 return _err("BAD_REQUEST", "upload target is not a directory", 400)
@@ -716,7 +737,7 @@ async def _upload(request: web.Request) -> web.Response:
                 return _err("BAD_REQUEST", "'root'/'path' must precede file parts", 400)
             filename = part.filename or ""
             try:
-                safe_name(filename, allow_hidden=cfg.files.allow_hidden)
+                safe_name(filename)
             except PathEscapeError as exc:
                 return _err("ACCESS_DENIED", str(exc), 403)
             target, status = await loop.run_in_executor(

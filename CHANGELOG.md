@@ -1,5 +1,81 @@
 # Changelog
 
+## v0.3.0 — 2026-05-28
+
+ComfyUI Settings system migration. Every user-facing preference now lives in
+the ComfyUI Settings dialog under the **FileManaty** category. Server-side
+configuration (`config.json`) shrinks to deployment policy that the server
+enforces and that browser clients cannot override.
+
+### Added
+
+- **FileManaty Settings dialog section** with 10 settings: `View.AllowHidden`,
+  `View.ShowThumbnails`, `View.GridDensity` (compact/normal/comfortable),
+  `View.ThumbnailSize` (small/medium/large), `Sort.Field`
+  (name/size/mtime/type), `Sort.Order` (asc/desc), `Sort.FoldersFirst`,
+  `Open.DefaultRoot`, `Confirm.OnDelete`, `Confirm.OnShiftDelete`.
+- New `web/settings.js` module — single adapter over ComfyUI's Settings API.
+- New `/list?include_hidden=true|false` query parameter — strict bool parse
+  (`true`/`false`/`1`/`0` case-insensitive); anything else → `400`.
+
+### Changed
+
+- `/list` now reads `include_hidden` from the request, not config. Default
+  (param absent) = `false`.
+- Grid sort is now driven by `Sort.Field` / `Sort.Order` /
+  `Sort.FoldersFirst` instead of a hardcoded name-asc + folders-first.
+- Default-root-on-open is driven by `Open.DefaultRoot`. The literal value
+  `"Last used"` preserves the previous behavior; a specific root id opens
+  there directly. Stale root ids fall back to the first available root.
+- `web/filemanaty.js`: `localStorage.lastRoot` is now read only when
+  `DefaultRoot = Last used`.
+
+### Removed
+
+- `files.allow_hidden` and `thumbnails.enabled` keys from `config.json`. Old
+  configs containing these keys still parse (silently ignored). Equivalent
+  toggles live in the Settings dialog now.
+- The server-side `thumbnails.enabled` gate on `/thumbnail`. Whether thumbs
+  render is now a pure client display choice (`View.ShowThumbnails`).
+- The ability to create dot-prefixed filenames via `/mkdir`, `/rename`,
+  `/upload`. Previously gated by `files.allow_hidden=true`; now always
+  disallowed via `safe_name`. Hidden files created out-of-band (e.g.
+  `.bashrc`) can still be surfaced in the listing by toggling
+  `View.AllowHidden`.
+
+### Security
+
+- **Trust Boundary** rule introduced: server-side settings (roots, paths,
+  writable flags, image_extensions allowlist, thumbnail max dimension,
+  upload size cap) cannot be overridden by client requests. The server
+  validates every client-supplied value against config; out-of-policy =
+  `400`/`403`, never a silent override. Documented in
+  §4.
+
+### Fixed
+
+- Settings changes (sort, density, thumbnail size, etc.) reflect immediately
+  in the grid. The settings.js adapter now caches values in onChange so
+  subscribers (e.g. `renderGrid`) read the new value synchronously instead
+  of racing the ComfyUI store update.
+
+### Known consequence (UX quirk — reconsider in v0.4)
+
+- Toggling `View.AllowHidden = true` makes dotfiles **visible in listings**
+  but `/preview`, `/download`, `/thumbnail`, and all write endpoints still
+  return `403 ACCESS_DENIED` for paths containing a dot-prefixed component.
+  This is intentional defense-in-depth for v0.3.0; v0.4.0 may plumb the
+  per-request include-hidden value through every endpoint if the
+  listing-only behavior proves limiting.
+
+### Tests
+
+- Backend: full suite green (target: ~240 passing, 1 platform-conditional
+  skip). New `include_hidden` cases in `tests/test_api.py`; new legacy-key
+  ignore cases in `tests/test_config.py`.
+- Frontend: smoke-tested via Docker + Playwright MCP per the spec §8.2
+  checklist.
+
 ## v0.2.1 — 2026-05-28
 
 Hardening and UX polish on the v0.2.0 file manager.

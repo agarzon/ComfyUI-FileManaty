@@ -33,9 +33,7 @@ def test_default_config_has_outputs_and_inputs_roots(tmp_path):
     assert [r.id for r in cfg.roots] == ["outputs", "inputs"]
     assert cfg.roots[0].path == outputs.resolve()
     assert cfg.roots[1].path == inputs.resolve()
-    assert cfg.files.allow_hidden is False
     assert ".png" in cfg.files.image_extensions
-    assert cfg.thumbnails.enabled is True
     assert cfg.thumbnails.max_dimension == 320
 
 
@@ -62,9 +60,7 @@ def test_load_valid_json_config(tmp_path):
 
     assert [r.id for r in cfg.roots] == ["custom"]
     assert cfg.roots[0].path == custom.resolve()
-    assert cfg.files.allow_hidden is True
     assert cfg.files.image_extensions == (".png",)
-    assert cfg.thumbnails.enabled is False
     assert cfg.thumbnails.max_dimension == 128
 
 
@@ -245,3 +241,27 @@ def test_write_rejects_nonpositive_falls_back(tmp_path):
     cfg = load_config(cfg_path, tmp_path, tmp_path)
     # invalid config -> loader falls back to defaults (existing behavior)
     assert cfg.write.max_upload_mb == 1024
+
+
+def test_legacy_allow_hidden_in_config_silently_ignored(tmp_path: Path):
+    """Pre-v0.3.0 configs may carry `files.allow_hidden`; the parser ignores it cleanly."""
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps({
+        "roots": [{"id": "r", "label": "R", "path": str(tmp_path)}],
+        "files": {"allow_hidden": True},
+    }))
+    cfg = load_config(cfg_path, default_output_dir=tmp_path, default_input_dir=tmp_path)
+    assert len(cfg.roots) == 1
+    assert not hasattr(cfg.files, "allow_hidden")
+
+
+def test_legacy_thumbnails_enabled_in_config_silently_ignored(tmp_path: Path):
+    """Pre-v0.3.0 configs may carry `thumbnails.enabled`; the parser ignores it cleanly."""
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps({
+        "roots": [{"id": "r", "label": "R", "path": str(tmp_path)}],
+        "thumbnails": {"enabled": False},
+    }))
+    cfg = load_config(cfg_path, default_output_dir=tmp_path, default_input_dir=tmp_path)
+    assert len(cfg.roots) == 1
+    assert not hasattr(cfg.thumbnails, "enabled")

@@ -6,6 +6,8 @@ import { promptText, confirmDialog, toast, trashView } from "./dialogs.js";
 import { attachContextMenu } from "./contextmenu.js";
 import { renderTree } from "./tree.js";
 import { makeDraggable, makeDropTarget } from "./dnd.js";
+import * as settings from "./settings.js";
+import { buildSettingsDefinitions, KEYS as SETTINGS_KEYS } from "./settings.js";
 
 export function escapeHtml(s) {
     return String(s)
@@ -216,11 +218,23 @@ async function initOverlay() {
 
     const { roots } = await fetchRoots();
     STATE.roots = roots;
+    settings.subscribe(SETTINGS_KEYS.ALLOW_HIDDEN, () => refresh().catch((e) => toast(e.message, "error")));
+    settings.subscribe(SETTINGS_KEYS.SHOW_THUMBNAILS, rerender);
+    settings.subscribe(SETTINGS_KEYS.GRID_DENSITY, rerender);
+    settings.subscribe(SETTINGS_KEYS.THUMBNAIL_SIZE, rerender);
+    settings.subscribe(SETTINGS_KEYS.SORT_FIELD, rerender);
+    settings.subscribe(SETTINGS_KEYS.SORT_ORDER, rerender);
+    settings.subscribe(SETTINGS_KEYS.SORT_FOLDERS_FIRST, rerender);
     renderTabs(roots);
     if (roots.length > 0) {
-        let preferred = null;
-        try { preferred = localStorage.getItem("filemanaty.lastRoot"); } catch {}
-        const chosen = roots.find((r) => r.id === preferred) || roots[0];
+        const defaultRoot = settings.get(SETTINGS_KEYS.DEFAULT_ROOT);
+        let preferredId = null;
+        if (defaultRoot && defaultRoot !== "Last used") {
+            preferredId = defaultRoot;
+        } else {
+            try { preferredId = localStorage.getItem("filemanaty.lastRoot"); } catch {}
+        }
+        const chosen = roots.find((r) => r.id === preferredId) || roots[0];
         await navigateTo(chosen.id, "");
     } else {
         document.getElementById("fm-grid").innerHTML = "<div style='color:#888'>No roots configured.</div>";
@@ -322,10 +336,15 @@ export async function actDelete(permanent) {
     if (STATE.selected.size === 0) { toast("Nothing selected"); return; }
     const items = [...STATE.selected].map(childPathOf);
     const verb = permanent ? "Permanently delete" : "Move to Trash";
-    const ok = await confirmDialog(`${verb} ${items.length} item(s)?`,
-        permanent ? "This cannot be undone." : "You can restore from Trash later.",
-        { danger: permanent });
-    if (!ok) return;
+    const needConfirm = permanent
+        ? settings.get(SETTINGS_KEYS.CONFIRM_ON_SHIFT_DELETE)
+        : settings.get(SETTINGS_KEYS.CONFIRM_ON_DELETE);
+    if (needConfirm) {
+        const ok = await confirmDialog(`${verb} ${items.length} item(s)?`,
+            permanent ? "This cannot be undone." : "You can restore from Trash later.",
+            { danger: permanent });
+        if (!ok) return;
+    }
     await apiDel(STATE.currentRoot, items, permanent);
     await refresh();
     toast(permanent ? "Deleted" : "Moved to Trash", "success");
@@ -342,7 +361,8 @@ function highlightTab() {
 
 export async function refresh() {
     if (!STATE.currentRoot) return;
-    const { entries, path } = await fetchList(STATE.currentRoot, STATE.currentPath);
+    const includeHidden = settings.get(SETTINGS_KEYS.ALLOW_HIDDEN);
+    const { entries, path } = await fetchList(STATE.currentRoot, STATE.currentPath, { includeHidden });
     STATE.entries = entries;
     // Drop any selected names that no longer exist after the refresh.
     STATE.selected = new Set([...STATE.selected].filter((n) => STATE.entries.some((e) => e.name === n)));
@@ -372,21 +392,29 @@ function renderBreadcrumb(path) {
 
 function renderGrid() {
     const grid = document.getElementById("fm-grid");
+    if (!grid) return;
+    const showThumbs = settings.get(SETTINGS_KEYS.SHOW_THUMBNAILS);
+    const thumbPx = { small: 100, medium: 140, large: 200 }[settings.get(SETTINGS_KEYS.THUMBNAIL_SIZE)] || 140;
+    const densityGap = { compact: 4, normal: 8, comfortable: 14 }[settings.get(SETTINGS_KEYS.GRID_DENSITY)] || 8;
+    grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${thumbPx}px, 1fr))`;
+    grid.style.gap = `${densityGap}px`;
     grid.innerHTML = "";
     for (const e of sortedEntries()) {
         const cell = document.createElement("div");
         cell.dataset.name = e.name;
         cell.style.cssText = "position:relative;aspect-ratio:1;background:#222;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;";
-        if (e.kind === "image") {
+        const childPath = STATE.currentPath ? `${STATE.currentPath}/${e.name}` : e.name;
+        if (e.kind === "image" && showThumbs) {
             const img = document.createElement("img");
             img.loading = "lazy";
-            const childPath = STATE.currentPath ? `${STATE.currentPath}/${e.name}` : e.name;
             img.src = thumbnailURL(STATE.currentRoot, childPath);
             img.style.cssText = "width:100%;height:100%;object-fit:cover;";
             img.onerror = () => { img.replaceWith(makeIcon("image")); };
             cell.appendChild(img);
         } else if (e.kind === "folder") {
             cell.appendChild(makeIcon("folder"));
+        } else if (e.kind === "image") {
+            cell.appendChild(makeIcon("image"));
         } else {
             cell.appendChild(makeIcon("file"));
         }
@@ -472,9 +500,21 @@ function renderPreview() {
 }
 
 export function sortedEntries() {
+    const field = settings.get(SETTINGS_KEYS.SORT_FIELD);
+    const order = settings.get(SETTINGS_KEYS.SORT_ORDER);
+    const foldersFirst = settings.get(SETTINGS_KEYS.SORT_FOLDERS_FIRST);
+    const dir = order === "desc" ? -1 : 1;
+
+    const cmpByField = (a, b) => {
+        if (field === "size") return (a.size - b.size) * dir;
+        if (field === "mtime") return (a.mtime - b.mtime) * dir;
+        if (field === "type") return a.kind.localeCompare(b.kind) * dir || a.name.localeCompare(b.name);
+        return a.name.localeCompare(b.name) * dir;
+    };
+
     return [...STATE.entries].sort((a, b) => {
-        if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
-        return a.name.localeCompare(b.name);
+        if (foldersFirst && a.type !== b.type) return a.type === "dir" ? -1 : 1;
+        return cmpByField(a, b);
     });
 }
 
@@ -496,6 +536,16 @@ app.registerExtension({
     actionBarButtons: [
         { icon: "pi pi-folder", label: "Files", tooltip: "Open file manager", onClick: openOverlay },
     ],
+    settings: await (async () => {
+        // Fetch root ids so the DefaultRoot combo lists them.
+        try {
+            const { roots } = await fetchRoots();
+            return buildSettingsDefinitions(roots.map((r) => r.id));
+        } catch (e) {
+            console.warn("filemanaty: failed to fetch roots for settings combo:", e);
+            return buildSettingsDefinitions([]);
+        }
+    })(),
     async setup(app) {
         app.extensionManager.registerSidebarTab({
             id: "filemanaty",

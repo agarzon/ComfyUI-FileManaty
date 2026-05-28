@@ -170,12 +170,43 @@ async def test_list_excludes_hidden_by_default(client_factory, tmp_root):
     assert ".hidden" not in names
 
 
-async def test_list_includes_hidden_when_configured(client_factory, tmp_root):
-    (tmp_root / ".hidden").write_text("visible")
-    client = await client_factory(files=FilesConfig(allow_hidden=True))
-    resp = await client.get("/filemanaty/api/v1/list?root=t&path=")
+async def test_list_include_hidden_true_surfaces_dotfiles(client_factory, tmp_root):
+    (tmp_root / ".hidden").write_text("visible-via-query-param")
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/list?root=t&path=&include_hidden=true")
+    assert resp.status == 200
     names = [e["name"] for e in (await resp.json())["data"]["entries"]]
     assert ".hidden" in names
+
+
+async def test_list_include_hidden_false_hides_dotfiles(client_factory, tmp_root):
+    (tmp_root / ".hidden").write_text("hidden")
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/list?root=t&path=&include_hidden=false")
+    names = [e["name"] for e in (await resp.json())["data"]["entries"]]
+    assert ".hidden" not in names
+
+
+async def test_list_include_hidden_accepts_aliases(client_factory, tmp_root):
+    (tmp_root / ".hidden").write_text("hi")
+    client = await client_factory()
+    for alias in ("1", "true", "TRUE", "True"):
+        resp = await client.get(f"/filemanaty/api/v1/list?root=t&path=&include_hidden={alias}")
+        assert resp.status == 200, alias
+        names = [e["name"] for e in (await resp.json())["data"]["entries"]]
+        assert ".hidden" in names, alias
+    for alias in ("0", "false", "FALSE", "False"):
+        resp = await client.get(f"/filemanaty/api/v1/list?root=t&path=&include_hidden={alias}")
+        assert resp.status == 200, alias
+        names = [e["name"] for e in (await resp.json())["data"]["entries"]]
+        assert ".hidden" not in names, alias
+
+
+async def test_list_include_hidden_invalid_returns_400(client_factory, tmp_root):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/list?root=t&path=&include_hidden=banana")
+    assert resp.status == 400
+    assert (await resp.json())["error"]["code"] == "BAD_REQUEST"
 
 
 def _make_image(path: Path, size=(800, 600)):
@@ -354,11 +385,11 @@ async def test_file_inside_hidden_dir_blocked_on_thumbnail(client_factory, tmp_r
 
 
 async def test_list_hidden_dir_allowed_when_configured(client_factory, tmp_root):
-    """When allow_hidden=True, hidden directories ARE listable."""
+    """When include_hidden=true, hidden directories ARE listable."""
     (tmp_root / ".secret_dir").mkdir()
     (tmp_root / ".secret_dir" / "file.txt").write_text("ok")
-    client = await client_factory(files=FilesConfig(allow_hidden=True))
-    resp = await client.get("/filemanaty/api/v1/list?root=t&path=.secret_dir")
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/list?root=t&path=.secret_dir&include_hidden=true")
     assert resp.status == 200
 
 
@@ -894,21 +925,21 @@ async def test_truncated_false_at_exactly_max(client_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 async def test_mkdir_trash_dir_rejected(client_factory):
-    client = await client_factory(files=FilesConfig(allow_hidden=True))
+    client = await client_factory()
     resp = await _post(client, "/filemanaty/api/v1/mkdir",
                        {"root": "t", "path": "", "name": ".filemanaty_trash"})
     assert resp.status == 403
 
 
 async def test_rename_to_trash_dir_rejected(client_factory):
-    client = await client_factory(files=FilesConfig(allow_hidden=True))
+    client = await client_factory()
     resp = await _post(client, "/filemanaty/api/v1/rename",
                        {"root": "t", "path": "top.txt", "name": ".filemanaty_trash"})
     assert resp.status == 403
 
 
 async def test_copy_into_trash_rejected(client_factory):
-    client = await client_factory(files=FilesConfig(allow_hidden=True))
+    client = await client_factory()
     await _post(client, "/filemanaty/api/v1/delete", {"root": "t", "items": ["sub"]})  # creates trash dir
     resp = await _post(client, "/filemanaty/api/v1/copy", {
         "src_root": "t", "src_items": ["top.txt"], "dst_root": "t", "dst_path": ".filemanaty_trash"})
@@ -916,7 +947,7 @@ async def test_copy_into_trash_rejected(client_factory):
 
 
 async def test_move_into_trash_rejected(client_factory):
-    client = await client_factory(files=FilesConfig(allow_hidden=True))
+    client = await client_factory()
     await _post(client, "/filemanaty/api/v1/delete", {"root": "t", "items": ["sub"]})
     resp = await _post(client, "/filemanaty/api/v1/move", {
         "src_root": "t", "src_items": ["top.txt"], "dst_root": "t", "dst_path": ".filemanaty_trash"})
@@ -924,7 +955,7 @@ async def test_move_into_trash_rejected(client_factory):
 
 
 async def test_upload_into_trash_rejected(client_factory):
-    client = await client_factory(files=FilesConfig(allow_hidden=True))
+    client = await client_factory()
     await _post(client, "/filemanaty/api/v1/delete", {"root": "t", "items": ["sub"]})
     form = FormData()
     form.add_field("root", "t"); form.add_field("path", ".filemanaty_trash")

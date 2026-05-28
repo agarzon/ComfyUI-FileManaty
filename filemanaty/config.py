@@ -34,13 +34,11 @@ class RootConfig:
 
 @dataclass(frozen=True)
 class FilesConfig:
-    allow_hidden: bool = False
     image_extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTS
 
 
 @dataclass(frozen=True)
 class ThumbnailsConfig:
-    enabled: bool = True
     max_dimension: int = 320
 
 
@@ -126,10 +124,7 @@ def _parse_config(raw: dict) -> Config:
     for ext in extensions:
         if not ext.startswith("."):
             raise _ConfigError(f"image extension must start with '.': {ext!r}")
-    files = FilesConfig(
-        allow_hidden=bool(files_raw.get("allow_hidden", False)),
-        image_extensions=extensions,
-    )
+    files = FilesConfig(image_extensions=extensions)
 
     thumbs_raw = raw.get("thumbnails", {})
     if not isinstance(thumbs_raw, dict):
@@ -140,10 +135,7 @@ def _parse_config(raw: dict) -> Config:
         raise _ConfigError(f"'thumbnails.max_dimension' must be an int: {exc}")
     if not 64 <= max_dim <= 1024:
         raise _ConfigError(f"thumbnails.max_dimension must be 64..1024, got {max_dim}")
-    thumbnails = ThumbnailsConfig(
-        enabled=bool(thumbs_raw.get("enabled", True)),
-        max_dimension=max_dim,
-    )
+    thumbnails = ThumbnailsConfig(max_dimension=max_dim)
 
     write_raw = raw.get("write", {})
     if not isinstance(write_raw, dict):
