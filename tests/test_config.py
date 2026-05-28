@@ -11,6 +11,7 @@ from filemanaty.config import (
     FilesConfig,
     RootConfig,
     ThumbnailsConfig,
+    WriteConfig,
     load_config,
 )
 
@@ -184,3 +185,24 @@ def test_max_dimension_out_of_range_rejected(tmp_path, caplog):
         cfg = load_config(cfg_file, outputs, outputs)
 
     assert [r.id for r in cfg.roots] == ["outputs", "inputs"]
+
+
+def test_write_defaults_to_1024(tmp_path):
+    cfg_path = tmp_path / "config.json"  # absent -> defaults
+    cfg = load_config(cfg_path, tmp_path, tmp_path)
+    assert cfg.write.max_upload_mb == 1024
+
+
+def test_write_parsed_from_file(tmp_path):
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps({"roots": [], "write": {"max_upload_mb": 50}}))
+    cfg = load_config(cfg_path, tmp_path, tmp_path)
+    assert cfg.write.max_upload_mb == 50
+
+
+def test_write_rejects_nonpositive_falls_back(tmp_path):
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps({"roots": [], "write": {"max_upload_mb": 0}}))
+    cfg = load_config(cfg_path, tmp_path, tmp_path)
+    # invalid config -> loader falls back to defaults (existing behavior)
+    assert cfg.write.max_upload_mb == 1024

@@ -18,5 +18,8 @@
   "thumbnails": {
     "enabled": true,
     "max_dimension": 320
+  },
+  "write": {
+    "max_upload_mb": 1024
   }
 }

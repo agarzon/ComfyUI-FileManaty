@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from filemanaty.security import safe_resolve, PathEscapeError
+from filemanaty.security import safe_resolve, PathEscapeError, safe_name, UnsafeNameError
 
 
 def test_empty_path_returns_root(tmp_root):
@@ -127,3 +127,38 @@ def test_symlinked_root_is_resolved_consistently(tmp_path, outside_dir):
     os.symlink(outside_dir, link_root, target_is_directory=True)
 
     assert safe_resolve(link_root, "x.txt") == (outside_dir / "x.txt").resolve()
+
+
+# ---------------------------------------------------------------------------
+# safe_name tests
+# ---------------------------------------------------------------------------
+
+def test_safe_name_accepts_plain():
+    assert safe_name("photo.png") == "photo.png"
+    assert safe_name("My Folder") == "My Folder"
+    assert safe_name("café 🎨.txt") == "café 🎨.txt"
+
+
+@pytest.mark.parametrize("bad", ["", ".", "..", "a/b", "a\\b", "x\x00y", "a\tb", "a\nb", "a\rb"])
+def test_safe_name_rejects_structural(bad):
+    with pytest.raises(UnsafeNameError):
+        safe_name(bad)
+
+
+def test_safe_name_accepts_internal_dots_and_dashes():
+    assert safe_name("file-v2.tar.gz") == "file-v2.tar.gz"
+
+
+def test_safe_name_rejects_hidden_by_default():
+    with pytest.raises(UnsafeNameError):
+        safe_name(".hidden")
+
+
+def test_safe_name_allows_hidden_when_opted_in():
+    assert safe_name(".hidden", allow_hidden=True) == ".hidden"
+
+
+@pytest.mark.parametrize("bad", [" leading", "trailing ", "dot."])
+def test_safe_name_rejects_windows_hostile(bad):
+    with pytest.raises(UnsafeNameError):
+        safe_name(bad)

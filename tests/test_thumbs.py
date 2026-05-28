@@ -71,3 +71,9 @@ def test_cache_key_changes_with_root_id():
 def test_cache_path_uses_webp_extension(tmp_path):
     p = cache_path(tmp_path, "abc123")
     assert p == tmp_path / "abc123.webp"
+
+
+def test_cache_key_canonicalizes_dot_segments():
+    a = cache_key("r", "sub/./img.png", 123, 320)
+    b = cache_key("r", "sub/img.png", 123, 320)
+    assert a == b

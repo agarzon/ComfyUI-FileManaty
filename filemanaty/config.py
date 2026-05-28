@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 _ID_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
@@ -44,10 +44,16 @@ class ThumbnailsConfig:
 
 
 @dataclass(frozen=True)
+class WriteConfig:
+    max_upload_mb: int = 1024
+
+
+@dataclass(frozen=True)
 class Config:
     roots: tuple[RootConfig, ...]
     files: FilesConfig
     thumbnails: ThumbnailsConfig
+    write: WriteConfig = field(default_factory=WriteConfig)
 
 
 def load_config(
@@ -137,7 +143,18 @@ def _parse_config(raw: dict) -> Config:
         max_dimension=max_dim,
     )
 
-    return Config(roots=tuple(roots), files=files, thumbnails=thumbnails)
+    write_raw = raw.get("write", {})
+    if not isinstance(write_raw, dict):
+        raise _ConfigError(f"'write' must be an object, got {type(write_raw).__name__}")
+    try:
+        max_upload = int(write_raw.get("max_upload_mb", 1024))
+    except (TypeError, ValueError) as exc:
+        raise _ConfigError(f"'write.max_upload_mb' must be an int: {exc}")
+    if not 1 <= max_upload <= 1_048_576:
+        raise _ConfigError(f"write.max_upload_mb must be 1..1048576, got {max_upload}")
+    write = WriteConfig(max_upload_mb=max_upload)
+
+    return Config(roots=tuple(roots), files=files, thumbnails=thumbnails, write=write)
 
 
 def _default_config(output_dir: Path, input_dir: Path) -> Config:

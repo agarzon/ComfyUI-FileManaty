@@ -32,6 +32,22 @@ Schema:
 | `files.image_extensions` | no | png/jpg/jpeg/webp/gif/bmp/avif | Lowercase, dot-prefixed |
 | `thumbnails.enabled` | no | `true` | Disable to skip thumbnail generation |
 | `thumbnails.max_dimension` | no | `320` | 64..1024, longest side |
+| `write.max_upload_mb` | no | `1024` | Maximum size per uploaded file, in megabytes (1..1048576) |
+
+### Write operations
+
+v0.2.0 adds file-management operations (create folder, rename, delete to a
+recoverable trash, copy, move, upload). They are guarded by the same root
+sandbox as browsing and by in-UI confirmation dialogs. There is **no
+built-in authentication** — deploy behind a reverse proxy with auth for any
+non-local exposure.
+
+- `write.max_upload_mb` (default `1024`): maximum size per uploaded file, in
+  megabytes.
+
+Deleted items go to a hidden `.filemanaty_trash/` folder inside each root
+and can be restored from the Trash view; `Shift+Delete` deletes permanently.
+The trash is not auto-evicted in v0.2.0 — empty it from the Trash view.
 
 If the config is malformed or invalid, the extension logs a clear error and falls back to defaults. ComfyUI does not crash.
 

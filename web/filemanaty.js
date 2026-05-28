@@ -1,7 +1,13 @@
 import { app } from "../../scripts/app.js";
-import { fetchRoots, fetchList, thumbnailURL, previewURL, downloadURL } from "./api.js";
+import { fetchRoots, fetchList, thumbnailURL, previewURL, downloadURL, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
+import { doCopy, doCut, doPaste, runWithConflicts } from "./clipboard.js";
+import { clickSelect, selectAll } from "./selection.js";
+import { promptText, confirmDialog, toast, trashView } from "./dialogs.js";
+import { attachContextMenu } from "./contextmenu.js";
+import { renderTree } from "./tree.js";
+import { makeDraggable, makeDropTarget } from "./dnd.js";
 
-function escapeHtml(s) {
+export function escapeHtml(s) {
     return String(s)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -10,13 +16,28 @@ function escapeHtml(s) {
         .replace(/'/g, "&#39;");
 }
 
-const STATE = {
+export function childPathOf(name) {
+    return STATE.currentPath ? `${STATE.currentPath}/${name}` : name;
+}
+
+export function selectedPaths() {
+    return [...STATE.selected].map(childPathOf);
+}
+
+export function rerender() {
+    renderGrid();
+    renderPreview();
+}
+
+export const STATE = {
     overlay: null,
     open: false,
     currentRoot: null,
     currentPath: "",
     entries: [],
-    selectedName: null,
+    selected: new Set(),   // names selected in the current folder
+    anchorName: null,      // last single-clicked name, for Shift-range
+    clipboard: null,       // { op: "copy"|"cut", root, paths: [relPath...] }
     roots: [],
 };
 
@@ -55,16 +76,32 @@ function buildOverlay() {
             <button id="fm-close" style="background:none;border:0;color:inherit;font-size:18px;cursor:pointer">✕</button>
         </div>
         <div id="fm-tabs" style="display:flex;gap:4px;padding:6px 14px;border-bottom:1px solid #333;background:#1e1e1e;"></div>
-        <div id="fm-toolbar" style="display:flex;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid #2a2a2a;font-size:12px;color:#aaa;">
+        <input id="fm-file-input" type="file" multiple style="display:none">
+        <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid #2a2a2a;font-size:12px;color:#aaa;">
             <span id="fm-breadcrumb"></span>
             <span style="flex:1"></span>
-            <button id="fm-refresh" style="background:#2a2a2a;border:0;color:inherit;padding:3px 10px;border-radius:3px;cursor:pointer">Refresh</button>
+            <span id="fm-selcount" style="opacity:.7;margin-right:6px"></span>
+            <button class="fm-tb" data-act="newfolder">＋ New Folder</button>
+            <button class="fm-tb" data-act="upload">⬆ Upload</button>
+            <button class="fm-tb" data-act="rename">✎ Rename</button>
+            <button class="fm-tb" data-act="copy">⧉ Copy</button>
+            <button class="fm-tb" data-act="cut">✂ Cut</button>
+            <button class="fm-tb" data-act="paste">📋 Paste</button>
+            <button class="fm-tb" data-act="trash">♻ Trash</button>
+            <button class="fm-tb danger" data-act="delete">🗑 Delete</button>
+            <button id="fm-refresh" class="fm-tb">Refresh</button>
         </div>
-        <div id="fm-body" style="flex:1;display:grid;grid-template-columns:1fr 38%;min-height:0;">
+        <div id="fm-body" style="flex:1;display:grid;grid-template-columns:200px 1fr 34%;min-height:0;">
+            <div id="fm-tree" style="overflow:auto;padding:8px;border-right:1px solid #2a2a2a;background:#161616;font-size:13px;"></div>
             <div id="fm-grid" style="overflow:auto;padding:10px;display:grid;gap:8px;align-content:start;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));"></div>
             <div id="fm-preview" style="border-left:1px solid #2a2a2a;padding:14px;display:flex;flex-direction:column;gap:10px;background:#181818;"></div>
         </div>
     `;
+    const style = document.createElement("style");
+    style.textContent = `#filemanaty-overlay .fm-tb{background:#2a2a2a;border:0;color:inherit;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px}
+#filemanaty-overlay .fm-tb:hover{background:#3a3a3a}
+#filemanaty-overlay .fm-tb.danger{color:#ff9a9a}`;
+    root.appendChild(style);
     return root;
 }
 
@@ -73,15 +110,34 @@ async function initOverlay() {
     document.addEventListener("keydown", (e) => {
         if (!STATE.open) return;
         if (e.key === "Escape") { closeOverlay(); return; }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+            selectAll(); e.preventDefault(); return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") { doCopy(); e.preventDefault(); return; }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") { doCut(); e.preventDefault(); return; }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") { doPaste().catch((x) => toast(x.message, "error")); e.preventDefault(); return; }
 
         const grid = sortedEntries();
-        const idx = grid.findIndex((entry) => entry.name === STATE.selectedName);
+        const current = STATE.selected.size === 1 ? [...STATE.selected][0] : STATE.anchorName;
+        const idx = grid.findIndex((entry) => entry.name === current);
         const cols = computeGridColumns();
-        if (e.key === "ArrowRight" && idx < grid.length - 1) { STATE.selectedName = grid[idx + 1].name; e.preventDefault(); }
-        else if (e.key === "ArrowLeft" && idx > 0) { STATE.selectedName = grid[idx - 1].name; e.preventDefault(); }
-        else if (e.key === "ArrowDown" && idx + cols < grid.length) { STATE.selectedName = grid[idx + cols].name; e.preventDefault(); }
-        else if (e.key === "ArrowUp" && idx - cols >= 0) { STATE.selectedName = grid[idx - cols].name; e.preventDefault(); }
-        else if (e.key === "Enter") {
+        if (e.key === "ArrowRight" && idx < grid.length - 1) {
+            const name = grid[idx + 1].name;
+            STATE.selected = new Set([name]); STATE.anchorName = name;
+            e.preventDefault();
+        } else if (e.key === "ArrowLeft" && idx > 0) {
+            const name = grid[idx - 1].name;
+            STATE.selected = new Set([name]); STATE.anchorName = name;
+            e.preventDefault();
+        } else if (e.key === "ArrowDown" && idx + cols < grid.length) {
+            const name = grid[idx + cols].name;
+            STATE.selected = new Set([name]); STATE.anchorName = name;
+            e.preventDefault();
+        } else if (e.key === "ArrowUp" && idx - cols >= 0) {
+            const name = grid[idx - cols].name;
+            STATE.selected = new Set([name]); STATE.anchorName = name;
+            e.preventDefault();
+        } else if (e.key === "Enter") {
             const sel = grid[idx];
             if (sel && sel.type === "dir") {
                 const next = STATE.currentPath ? `${STATE.currentPath}/${sel.name}` : sel.name;
@@ -95,13 +151,52 @@ async function initOverlay() {
                 navigateTo(STATE.currentRoot, parts.join("/"));
                 e.preventDefault();
             }
-        } else {
+        } else if (e.key === "F2") { actRename().catch((x) => toast(x.message, "error")); e.preventDefault(); return; }
+        else if (e.key === "Delete") { actDelete(e.shiftKey).catch((x) => toast(x.message, "error")); e.preventDefault(); return; }
+        else {
             return;
         }
         renderGrid();
         renderPreview();
     });
+    document.querySelectorAll("#fm-toolbar .fm-tb").forEach((b) => {
+        const act = b.dataset.act;
+        if (act) b.addEventListener("click", () => onToolbarAction(act));
+    });
     document.getElementById("fm-refresh").addEventListener("click", () => refresh());
+
+    const fileInput = document.getElementById("fm-file-input");
+    fileInput.addEventListener("change", () => {
+        if (fileInput.files.length) uploadFileList(fileInput.files).catch((x) => toast(x.message, "error"));
+        fileInput.value = "";
+    });
+
+    const gridEl = document.getElementById("fm-grid");
+    gridEl.addEventListener("dragover", (e) => {
+        if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) {
+            e.preventDefault();
+            gridEl.style.outline = "2px dashed #0a84ff";
+        }
+    });
+    gridEl.addEventListener("dragleave", () => { gridEl.style.outline = "none"; });
+    gridEl.addEventListener("drop", (e) => {
+        gridEl.style.outline = "none";
+        if (e.dataTransfer && e.dataTransfer.files.length) {
+            e.preventDefault();
+            uploadFileList(e.dataTransfer.files).catch((x) => toast(x.message, "error"));
+        }
+    });
+
+    attachContextMenu({
+        rerender,
+        newFolder: () => actNewFolder().catch((x) => toast(x.message, "error")),
+        rename: () => actRename().catch((x) => toast(x.message, "error")),
+        del: (perm) => actDelete(perm).catch((x) => toast(x.message, "error")),
+        copy: doCopy,
+        cut: doCut,
+        paste: () => doPaste().catch((x) => toast(x.message, "error")),
+        upload: () => document.getElementById("fm-file-input").click(),
+    });
 
     const { roots } = await fetchRoots();
     STATE.roots = roots;
@@ -129,13 +224,74 @@ function renderTabs(roots) {
     }
 }
 
-async function navigateTo(rootId, relPath) {
+export async function navigateTo(rootId, relPath) {
     STATE.currentRoot = rootId;
     STATE.currentPath = relPath;
-    STATE.selectedName = null;
+    STATE.selected.clear();
+    STATE.anchorName = null;
     try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {}
     highlightTab();
+    renderTree().catch((e) => console.error("filemanaty tree render failed:", e));
     await refresh();
+}
+
+async function onToolbarAction(act) {
+    try {
+        if (act === "newfolder") return await actNewFolder();
+        if (act === "upload") { document.getElementById("fm-file-input").click(); return; }
+        if (act === "rename") return await actRename();
+        if (act === "copy") return doCopy();
+        if (act === "cut") return doCut();
+        if (act === "paste") return await doPaste();
+        if (act === "delete") return await actDelete(false);
+        if (act === "trash") return await trashView(STATE.currentRoot, () => refresh());
+    } catch (e) {
+        console.error("filemanaty action failed:", e);
+        toast(e.message || "Action failed", "error");
+    }
+}
+
+async function uploadFileList(files) {
+    const list = [...files];
+    toast(`Uploading ${list.length} file(s)…`);
+    const data = await runWithConflicts((onConflict) =>
+        apiUpload(STATE.currentRoot, STATE.currentPath, list, onConflict));
+    if (data === null) return;  // cancelled at conflict
+    await refresh();
+    const failed = (data.results || []).filter((r) => r.status === "error");
+    if (failed.length) toast(`${failed.length} upload(s) failed`, "error");
+    else toast("Upload complete", "success");
+}
+
+export async function actNewFolder() {
+    const name = await promptText("New folder name");
+    if (!name) return;
+    await apiMkdir(STATE.currentRoot, STATE.currentPath, name);
+    await refresh();
+    toast("Folder created", "success");
+}
+
+export async function actRename() {
+    if (STATE.selected.size !== 1) { toast("Select exactly one item to rename"); return; }
+    const oldName = [...STATE.selected][0];
+    const name = await promptText("Rename to", oldName);
+    if (!name || name === oldName) return;
+    await apiRename(STATE.currentRoot, childPathOf(oldName), name);
+    await refresh();
+    toast("Renamed", "success");
+}
+
+export async function actDelete(permanent) {
+    if (STATE.selected.size === 0) { toast("Nothing selected"); return; }
+    const items = [...STATE.selected].map(childPathOf);
+    const verb = permanent ? "Permanently delete" : "Move to Trash";
+    const ok = await confirmDialog(`${verb} ${items.length} item(s)?`,
+        permanent ? "This cannot be undone." : "You can restore from Trash later.",
+        { danger: permanent });
+    if (!ok) return;
+    await apiDel(STATE.currentRoot, items, permanent);
+    await refresh();
+    toast(permanent ? "Deleted" : "Moved to Trash", "success");
 }
 
 function highlightTab() {
@@ -147,7 +303,7 @@ function highlightTab() {
     });
 }
 
-async function refresh() {
+export async function refresh() {
     if (!STATE.currentRoot) return;
     const { entries, path } = await fetchList(STATE.currentRoot, STATE.currentPath);
     STATE.entries = entries;
@@ -201,15 +357,24 @@ function renderGrid() {
         const label = document.createElement("div");
         label.textContent = e.name;
         label.style.cssText = "position:absolute;bottom:0;left:0;right:0;padding:2px 6px;background:rgba(0,0,0,.7);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        if (STATE.clipboard && STATE.clipboard.op === "cut"
+            && STATE.clipboard.root === STATE.currentRoot
+            && STATE.clipboard.paths.includes(childPathOf(e.name))) {
+            cell.style.opacity = "0.45";
+        }
         cell.appendChild(label);
-        if (e.name === STATE.selectedName) {
+        if (STATE.selected.has(e.name)) {
             cell.style.outline = "2px solid #0a84ff";
             cell.style.outlineOffset = "2px";
         }
-        cell.addEventListener("click", () => onCellClick(e));
+        cell.addEventListener("click", (ev) => onCellClick(e, ev));
         cell.addEventListener("dblclick", () => onCellDblClick(e));
+        makeDraggable(cell, e.name);
+        if (e.type === "dir") makeDropTarget(cell, STATE.currentRoot, childPathOf(e.name));
         grid.appendChild(cell);
     }
+    const sc = document.getElementById("fm-selcount");
+    if (sc) sc.textContent = STATE.selected.size ? `${STATE.selected.size} selected` : "";
 }
 
 function makeIcon(kind) {
@@ -219,10 +384,8 @@ function makeIcon(kind) {
     return d;
 }
 
-function onCellClick(entry) {
-    STATE.selectedName = entry.name;
-    renderGrid();
-    renderPreview();
+function onCellClick(entry, ev) {
+    clickSelect(entry, ev);
 }
 
 function onCellDblClick(entry) {
@@ -234,7 +397,8 @@ function onCellDblClick(entry) {
 
 function renderPreview() {
     const el = document.getElementById("fm-preview");
-    const sel = STATE.entries.find((e) => e.name === STATE.selectedName);
+    const onlyName = STATE.selected.size === 1 ? [...STATE.selected][0] : null;
+    const sel = onlyName ? STATE.entries.find((e) => e.name === onlyName) : null;
     if (!sel) {
         el.innerHTML = "<div style='color:#666'>Select a file.</div>";
         return;
@@ -271,7 +435,7 @@ function renderPreview() {
     }
 }
 
-function sortedEntries() {
+export function sortedEntries() {
     return [...STATE.entries].sort((a, b) => {
         if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
         return a.name.localeCompare(b.name);

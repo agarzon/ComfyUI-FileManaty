@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from PIL import Image, UnidentifiedImageError
 
@@ -43,6 +43,7 @@ def generate_thumbnail(src: Path, max_dimension: int) -> bytes:
 
 def cache_key(root_id: str, rel_path: str, mtime_ns: int, max_dimension: int) -> str:
     """Stable key for an on-disk thumb cache entry (first 16 hex chars of sha256)."""
+    rel_path = PurePosixPath(rel_path).as_posix()
     raw = f"{root_id}:{rel_path}:{mtime_ns}:{max_dimension}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
 

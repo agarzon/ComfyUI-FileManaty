@@ -6,11 +6,37 @@ through ``safe_resolve``. Do not call ``Path.resolve`` or
 """
 from __future__ import annotations
 
+import unicodedata
 from pathlib import Path
 
 
 class PathEscapeError(PermissionError):
     """Raised when a user-supplied path escapes its configured root."""
+
+
+class UnsafeNameError(PathEscapeError):
+    """Raised when a user-supplied single path component (name) is unsafe."""
+
+
+_UNSAFE_NAME_CHARS = frozenset("/\\\x00")
+
+
+def safe_name(name: str, *, allow_hidden: bool = False) -> str:
+    """Validate a single new path component (file/folder name).
+
+    Rejects: empty, '.', '..', names containing '/', '\\' or NUL, names with
+    leading/trailing whitespace, names ending in '.', and (unless
+    ``allow_hidden``) names beginning with a dot. Returns ``name`` unchanged.
+    """
+    if not name or name in (".", ".."):
+        raise UnsafeNameError(f"invalid name: {name!r}")
+    if any(c in _UNSAFE_NAME_CHARS or unicodedata.category(c) == "Cc" for c in name):
+        raise UnsafeNameError(f"name contains a path separator or control character: {name!r}")
+    if name.startswith(".") and not allow_hidden:
+        raise UnsafeNameError(f"hidden name not allowed: {name!r}")
+    if name != name.strip() or name.endswith("."):
+        raise UnsafeNameError(f"name has leading/trailing whitespace or trailing dot: {name!r}")
+    return name
 
 
 def safe_resolve(root_path: Path, rel: str) -> Path:

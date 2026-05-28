@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.2.0 — 2026-05-28
+
+Turns the read-only viewer into a full Explorer-style file manager.
+
+### Features
+
+- Folder tree pane (left) showing all configured roots, lazy-expanded (caret toggles; clicking a folder navigates into it).
+- Multi-select in the grid (click / Ctrl-click / Shift-click / Ctrl-A).
+- Create folder, rename, and upload (toolbar button + drag files from the OS desktop). Any file type; size capped by `write.max_upload_mb` (default 1 GB).
+- Delete to a recoverable, per-root trash (`.filemanaty_trash/`); Shift+Delete deletes permanently. Trash view to restore, purge, or empty.
+- Copy / cut / paste (Ctrl+C/X/V) and move, within and across roots.
+- Drag-and-drop move (or copy with Ctrl held) onto folders and tree nodes.
+- Right-click context menus on items and empty space.
+- Explorer-style conflict handling: Replace / Keep both / Skip, via a 409-driven retry flow.
+- Result toasts for uploads and bulk operations.
+
+### Security
+
+- All write operations funnel through the same `safe_resolve` chokepoint; cross-root operations validate both source and destination. New `safe_name()` rejects path separators, control characters, `.`/`..`, and (by default) dotfiles in new names. Operations refuse to touch a configured root itself or the `.filemanaty_trash` directory (across every write endpoint), and refuse moving a folder into its own descendant. Uploads are size-capped while streaming. Replace operations use a temp-then-atomic-swap so a mid-operation failure never destroys existing data.
+- Trust model unchanged: no built-in authentication — deploy behind a reverse proxy for any non-local exposure.
+
+### Fixed
+
+- `truncated` flag off-by-one at exactly `MAX_LIST_ENTRIES` entries.
+- Thumbnail cache key now canonicalizes `.` path segments (no duplicate cache entries for equivalent paths).
+
+### Tests
+
+- Backend: 194 passing, 1 platform-conditional skip. Frontend verified by browser smoke testing in the Docker dev environment.
+
+### Known limitations (deferred to v0.3.0+)
+
+- No trash auto-eviction — empty the trash manually from the Trash view.
+- No built-in auth, server-side search/sort/filter, video thumbnails, audit log, or dual-pane mode.
+
 ## v0.1.0-rc3 — 2026-05-28
 
 First release candidate considered ready for personal use. Read-only file viewer for ComfyUI.

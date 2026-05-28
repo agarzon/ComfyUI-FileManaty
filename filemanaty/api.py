@@ -7,9 +7,11 @@ For tests, ``attach_routes(app)`` mounts the same routes on any app.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import mimetypes
 import os
+import secrets
 import tempfile
 import urllib.parse
 from pathlib import Path
@@ -17,14 +19,18 @@ from typing import Any, Optional
 
 from aiohttp import web
 
+from filemanaty import operations as ops
 from filemanaty.config import Config, RootConfig, load_config
-from filemanaty.security import PathEscapeError, has_hidden_component, safe_resolve
+from filemanaty.security import (
+    PathEscapeError, has_hidden_component, safe_name, safe_resolve,
+)
 from filemanaty.thumbs import ThumbError, cache_key, cache_path, generate_thumbnail
 
 log = logging.getLogger("filemanaty")
 
 API_PREFIX = "/filemanaty/api/v1"
 MAX_LIST_ENTRIES = 5000
+_VALID_ON_CONFLICT = (None, "skip", "replace", "keep_both")
 
 _config: Optional[Config] = None
 
@@ -60,20 +66,31 @@ def _ok(data: Any) -> web.Response:
     return web.json_response({"ok": True, "data": data, "error": None})
 
 
-def _err(code: str, message: str, status: int) -> web.Response:
-    # Spec §9: INFO on 4xx with the raw input that triggered it; helps debug
-    # user confusion without flooding logs on legit success paths.
+def _err(code: str, message: str, status: int, **extra: Any) -> web.Response:
     if 400 <= status < 500:
         log.info("filemanaty: %s -> %d %s", code, status, message)
-    return web.json_response(
-        {"ok": False, "data": None, "error": {"code": code, "message": message}},
-        status=status,
-    )
+    err: dict[str, Any] = {**extra, "code": code, "message": message}
+    return web.json_response({"ok": False, "data": None, "error": err}, status=status)
 
 
 def _strip_path(raw: str) -> str:
     """Strip leading/trailing slashes and `./` from a relative path."""
     return raw.strip("/").strip("\\").removeprefix("./")
+
+
+async def _json_body(request: web.Request) -> dict[str, Any]:
+    try:
+        body = await request.json()
+    except Exception:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def _resolve_dir(cfg: Config, root_id: str, raw_path: str) -> tuple[RootConfig, Path]:
+    """Resolve a directory path inside a root. Raises PathEscapeError."""
+    root = _find_root(cfg, root_id)
+    target = safe_resolve(root.path, _strip_path(raw_path))
+    return root, target
 
 
 def _kind_for(name: str, path: Path, image_exts: tuple[str, ...]) -> str:
@@ -131,7 +148,7 @@ async def _list(request: web.Request) -> web.Response:
             for entry in it:
                 if _is_hidden(entry.name) and not cfg.files.allow_hidden:
                     continue
-                if len(out) >= MAX_LIST_ENTRIES:
+                if len(out) > MAX_LIST_ENTRIES:
                     break
                 try:
                     st = entry.stat()
@@ -152,7 +169,8 @@ async def _list(request: web.Request) -> web.Response:
     if err_code == "NOT_A_DIR":
         return _err("BAD_REQUEST", "list target must be a directory", 400)
     assert entries is not None
-    truncated = len(entries) >= MAX_LIST_ENTRIES
+    truncated = len(entries) > MAX_LIST_ENTRIES
+    entries = entries[:MAX_LIST_ENTRIES]
 
     rel = target.resolve().relative_to(root.path.resolve()).as_posix()
     if rel == ".":
@@ -315,6 +333,415 @@ async def _download(request: web.Request) -> web.Response:
     return await _file_endpoint(request, attachment=True)
 
 
+async def _mkdir(request: web.Request) -> web.Response:
+    cfg = _get_config()
+    body = await _json_body(request)
+    root_id, raw_path, name = body.get("root"), body.get("path"), body.get("name")
+    on_conflict = body.get("on_conflict")
+    if not isinstance(root_id, str) or not isinstance(raw_path, str) or not isinstance(name, str):
+        return _err("BAD_REQUEST", "missing 'root', 'path', or 'name'", 400)
+    if on_conflict not in _VALID_ON_CONFLICT:
+        return _err("BAD_REQUEST", "invalid on_conflict value", 400)
+    try:
+        root, parent = _resolve_dir(cfg, root_id, raw_path)
+        safe_name(name, allow_hidden=cfg.files.allow_hidden)
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    if _is_trash_path(parent / name, root.path):
+        return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
+    if (resp := _reject_hidden(parent, root.path, cfg)) is not None:
+        return resp
+    if not parent.is_dir():
+        return _err("BAD_REQUEST", "parent path is not a directory", 400)
+
+    loop = asyncio.get_running_loop()
+    target, status = await loop.run_in_executor(
+        None, functools.partial(ops.resolve_collision, parent, name, on_conflict, is_dir=True))
+    if status == "conflict":
+        return _err("CONFLICT", "folder already exists", 409, conflicts=[name])
+    if status == "skip":
+        return _ok({"status": "skipped", "name": name})
+    try:
+        await loop.run_in_executor(
+            None, functools.partial(ops.make_dir, parent, target.name, exist_ok=status == "replace"))
+    except FileExistsError:
+        return _err("CONFLICT", "folder already exists", 409, conflicts=[target.name])
+    return _ok({"status": "done", "name": target.name})
+
+
+async def _transfer(request: web.Request, *, move: bool) -> web.Response:
+    """Shared copy/move handler. Validates src+dst roots, applies one
+    on_conflict policy to all items, returns per-item results."""
+    cfg = _get_config()
+    body = await _json_body(request)
+    src_root_id = body.get("src_root")
+    dst_root_id = body.get("dst_root")
+    src_items = body.get("src_items")
+    dst_path = body.get("dst_path")
+    on_conflict = body.get("on_conflict")
+    if (not isinstance(src_root_id, str) or not isinstance(dst_root_id, str)
+            or not isinstance(dst_path, str) or not isinstance(src_items, list)
+            or not all(isinstance(s, str) for s in src_items)):
+        return _err("BAD_REQUEST", "missing/invalid transfer fields", 400)
+    if on_conflict not in _VALID_ON_CONFLICT:
+        return _err("BAD_REQUEST", "invalid on_conflict value", 400)
+    try:
+        src_root = _find_root(cfg, src_root_id)
+        dst_root, dst_dir = _resolve_dir(cfg, dst_root_id, dst_path)
+        srcs = [safe_resolve(src_root.path, _strip_path(s)) for s in src_items]
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    if not dst_dir.is_dir():
+        return _err("BAD_REQUEST", "destination is not a directory", 400)
+    if _is_trash_path(dst_dir, dst_root.path):
+        return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
+    if (resp := _reject_hidden(dst_dir, dst_root.path, cfg)) is not None:
+        return resp
+    for src in srcs:
+        if _is_trash_path(src, src_root.path):
+            return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
+        if (resp := _reject_hidden(src, src_root.path, cfg)) is not None:
+            return resp
+        if src.resolve() == src_root.path.resolve():
+            return _err("ACCESS_DENIED", "cannot transfer a root", 403)
+        if not src.exists():
+            return _err("NOT_FOUND", f"no such item: {src.name}", 404)
+        if ops.is_descendant(dst_dir, src):
+            return _err("BAD_REQUEST", "cannot copy or move a folder into itself", 400)
+
+    loop = asyncio.get_running_loop()
+    # First pass: detect conflicts when no policy was given.
+    conflicts: list[str] = []
+    plan: list[tuple[Path, Optional[Path], str]] = []  # (src, target_or_None, status)
+    for src in srcs:
+        target, status = await loop.run_in_executor(
+            None, functools.partial(ops.resolve_collision, dst_dir, src.name, on_conflict, is_dir=src.is_dir()))
+        if status == "conflict":
+            conflicts.append(src.name)
+        else:
+            plan.append((src, target, status))
+    if conflicts:
+        return _err("CONFLICT", "targets already exist", 409, conflicts=conflicts)
+
+    # Refuse a batch where two items would land on the same destination name —
+    # otherwise the second silently overwrites the first.
+    seen_targets: set[Path] = set()
+    for _src, target, status in plan:
+        if status == "skip":
+            continue
+        if target in seen_targets:
+            return _err("CONFLICT", "multiple items map to the same destination name",
+                        409, conflicts=[target.name])
+        seen_targets.add(target)
+
+    results: list[dict[str, Any]] = []
+    op = ops.move_one if move else ops.copy_one
+    for src, target, status in plan:
+        if status == "skip":
+            results.append({"name": src.name, "status": "skipped"})
+            continue
+        try:
+            await loop.run_in_executor(
+                None, functools.partial(op, src, target, replace=status == "replace"))
+            results.append({"name": target.name, "status": "done"})
+        except OSError as exc:
+            log.info("filemanaty: transfer failed for %s: %s", src.name, exc)
+            results.append({"name": src.name, "status": "error", "message": str(exc)})
+    return _ok({"results": results})
+
+
+async def _copy(request: web.Request) -> web.Response:
+    return await _transfer(request, move=False)
+
+
+async def _move(request: web.Request) -> web.Response:
+    return await _transfer(request, move=True)
+
+
+def _is_trash_path(target: Path, root_path: Path) -> bool:
+    try:
+        rel = target.resolve().relative_to(root_path.resolve())
+    except ValueError:
+        return False
+    return ops.TRASH_DIRNAME in rel.parts
+
+
+async def _delete(request: web.Request) -> web.Response:
+    cfg = _get_config()
+    body = await _json_body(request)
+    root_id = body.get("root")
+    items = body.get("items")
+    permanent = bool(body.get("permanent", False))
+    if not isinstance(root_id, str) or not isinstance(items, list) or not all(isinstance(s, str) for s in items):
+        return _err("BAD_REQUEST", "missing/invalid 'root' or 'items'", 400)
+    try:
+        root = _find_root(cfg, root_id)
+        targets = [safe_resolve(root.path, _strip_path(s)) for s in items]
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    for t in targets:
+        if t.resolve() == root.path.resolve():
+            return _err("ACCESS_DENIED", "cannot delete a root", 403)
+        if _is_trash_path(t, root.path):
+            return _err("ACCESS_DENIED", "cannot delete the trash via /delete", 403)
+        if (resp := _reject_hidden(t, root.path, cfg)) is not None:
+            return resp
+        if not t.exists():
+            return _err("NOT_FOUND", f"no such item: {t.name}", 404)
+
+    loop = asyncio.get_running_loop()
+    results: list[dict[str, Any]] = []
+    for t in targets:
+        try:
+            if permanent:
+                await loop.run_in_executor(None, ops.delete_permanent, t)
+                results.append({"name": t.name, "status": "deleted"})
+            else:
+                tid = await loop.run_in_executor(
+                    None, functools.partial(ops.move_to_trash, root.path, t))
+                results.append({"name": t.name, "status": "trashed", "id": tid})
+        except OSError as exc:
+            log.info("filemanaty: delete failed for %s: %s", t.name, exc)
+            results.append({"name": t.name, "status": "error", "message": str(exc)})
+    return _ok({"results": results})
+
+
+async def _rename(request: web.Request) -> web.Response:
+    cfg = _get_config()
+    body = await _json_body(request)
+    root_id, raw_path, name = body.get("root"), body.get("path"), body.get("name")
+    on_conflict = body.get("on_conflict")
+    if not isinstance(root_id, str) or not isinstance(raw_path, str) or not isinstance(name, str):
+        return _err("BAD_REQUEST", "missing 'root', 'path', or 'name'", 400)
+    if on_conflict not in _VALID_ON_CONFLICT:
+        return _err("BAD_REQUEST", "invalid on_conflict value", 400)
+    try:
+        root = _find_root(cfg, root_id)
+        src = safe_resolve(root.path, _strip_path(raw_path))
+        safe_name(name, allow_hidden=cfg.files.allow_hidden)
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    if src.resolve() == root.path.resolve():
+        return _err("ACCESS_DENIED", "cannot rename a root", 403)
+    if _is_trash_path(src, root.path) or _is_trash_path(src.parent / name, root.path):
+        return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
+    if not src.exists():
+        return _err("NOT_FOUND", "no such item", 404)
+    if (resp := _reject_hidden(src, root.path, cfg)) is not None:
+        return resp
+
+    loop = asyncio.get_running_loop()
+    target, status = await loop.run_in_executor(
+        None, functools.partial(ops.resolve_collision, src.parent, name, on_conflict, is_dir=src.is_dir()))
+    if status == "conflict":
+        return _err("CONFLICT", "target name already exists", 409, conflicts=[name])
+    if status == "skip":
+        return _ok({"status": "skipped", "name": src.name})
+    try:
+        await loop.run_in_executor(
+            None, functools.partial(ops.rename, src, target, replace=status == "replace"))
+    except OSError as exc:
+        log.info("filemanaty: rename failed for %s -> %s: %s", src.name, target.name, exc)
+        return _err("IO_ERROR", "rename failed", 409)
+    return _ok({"status": "done", "name": target.name})
+
+
+async def _trash_list(request: web.Request) -> web.Response:
+    cfg = _get_config()
+    root_id = request.query.get("root")
+    if root_id is None:
+        return _err("BAD_REQUEST", "missing 'root' query param", 400)
+    try:
+        root = _find_root(cfg, root_id)
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    loop = asyncio.get_running_loop()
+    items = await loop.run_in_executor(None, ops.list_trash, root.path)
+    return _ok({"root": root_id, "items": items})
+
+
+async def _trash_restore(request: web.Request) -> web.Response:
+    cfg = _get_config()
+    body = await _json_body(request)
+    root_id = body.get("root")
+    ids = body.get("ids")
+    on_conflict = body.get("on_conflict")
+    if not isinstance(root_id, str) or not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        return _err("BAD_REQUEST", "missing/invalid 'root' or 'ids'", 400)
+    if on_conflict not in _VALID_ON_CONFLICT:
+        return _err("BAD_REQUEST", "invalid on_conflict value", 400)
+    try:
+        root = _find_root(cfg, root_id)
+        for tid in ids:
+            safe_name(tid)  # ids contain only digits, '-', hex — no separators/dots
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    ids = list(dict.fromkeys(ids))  # dedupe; a tid restored once must not be processed twice
+
+    loop = asyncio.get_running_loop()
+    conflicts: list[str] = []
+    plan: list[tuple[str, Optional[Path], str]] = []  # (tid, target, status)
+    for tid in ids:
+        try:
+            meta = await loop.run_in_executor(None, functools.partial(ops.trash_meta, root.path, tid))
+            stored = await loop.run_in_executor(None, functools.partial(ops.trash_item_path, root.path, tid))
+        except (FileNotFoundError, OSError, ValueError):
+            return _err("NOT_FOUND", f"no such trash id: {tid}", 404)
+        try:
+            safe_name(meta["original_name"], allow_hidden=True)
+        except PathEscapeError:
+            return _err("ACCESS_DENIED", f"unsafe stored name for trash id: {tid}", 403)
+        try:
+            target = safe_resolve(root.path, _strip_path(meta["original_rel_path"]))
+        except PathEscapeError as exc:
+            return _err("ACCESS_DENIED", str(exc), 403)
+        chosen, status = await loop.run_in_executor(
+            None, functools.partial(ops.resolve_collision, target.parent, meta["original_name"], on_conflict, is_dir=stored.is_dir()))
+        if status == "conflict":
+            conflicts.append(meta["original_name"])
+        else:
+            plan.append((tid, chosen, status))
+    if conflicts:
+        return _err("CONFLICT", "restore targets already exist", 409, conflicts=conflicts)
+
+    seen_targets: set[Path] = set()
+    for _tid, target, status in plan:
+        if status == "skip":
+            continue
+        if target in seen_targets:
+            return _err("CONFLICT", "multiple trash items map to the same destination name",
+                        409, conflicts=[target.name])
+        seen_targets.add(target)
+
+    results: list[dict[str, Any]] = []
+    for tid, target, status in plan:
+        if status == "skip":
+            results.append({"id": tid, "status": "skipped"})
+            continue
+        await loop.run_in_executor(
+            None, functools.partial(ops.restore_from_trash, root.path, tid, target, replace=status == "replace"))
+        results.append({"id": tid, "status": "restored", "name": target.name})
+    return _ok({"results": results})
+
+
+async def _trash_purge(request: web.Request) -> web.Response:
+    cfg = _get_config()
+    body = await _json_body(request)
+    root_id = body.get("root")
+    ids = body.get("ids")
+    purge_everything = bool(body.get("all", False))
+    if not isinstance(root_id, str):
+        return _err("BAD_REQUEST", "missing 'root'", 400)
+    try:
+        root = _find_root(cfg, root_id)
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    loop = asyncio.get_running_loop()
+    if purge_everything:
+        await loop.run_in_executor(None, ops.purge_all, root.path)
+        return _ok({"status": "emptied"})
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        return _err("BAD_REQUEST", "missing/invalid 'ids'", 400)
+    try:
+        for tid in ids:
+            safe_name(tid)
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    for tid in ids:
+        await loop.run_in_executor(None, functools.partial(ops.purge, root.path, tid))
+    return _ok({"status": "purged", "count": len(ids)})
+
+
+async def _upload(request: web.Request) -> web.Response:
+    cfg = _get_config()
+    max_bytes = cfg.write.max_upload_mb * 1024 * 1024
+    on_conflict = request.query.get("on_conflict")
+    if on_conflict not in _VALID_ON_CONFLICT:
+        return _err("BAD_REQUEST", "invalid on_conflict value", 400)
+    try:
+        reader = await request.multipart()
+    except Exception:
+        return _err("BAD_REQUEST", "expected multipart/form-data", 400)
+
+    root_id: Optional[str] = None
+    dst_dir: Optional[Path] = None
+    root: Optional[RootConfig] = None
+    results: list[dict[str, Any]] = []
+    loop = asyncio.get_running_loop()
+
+    async for part in reader:
+        if part.name == "root":
+            root_id = (await part.text()).strip()
+        elif part.name == "path":
+            raw_path = await part.text()
+            if root_id is None:
+                return _err("BAD_REQUEST", "'root' field must precede 'path'", 400)
+            try:
+                root, dst_dir = _resolve_dir(cfg, root_id, raw_path)
+            except PathEscapeError as exc:
+                return _err("ACCESS_DENIED", str(exc), 403)
+            if _is_trash_path(dst_dir, root.path):
+                return _err("ACCESS_DENIED", "cannot modify the trash directory", 403)
+            if (resp := _reject_hidden(dst_dir, root.path, cfg)) is not None:
+                return resp
+            if not dst_dir.is_dir():
+                return _err("BAD_REQUEST", "upload target is not a directory", 400)
+        elif part.name == "file":
+            if dst_dir is None or root is None:
+                return _err("BAD_REQUEST", "'root'/'path' must precede file parts", 400)
+            filename = part.filename or ""
+            try:
+                safe_name(filename, allow_hidden=cfg.files.allow_hidden)
+            except PathEscapeError as exc:
+                return _err("ACCESS_DENIED", str(exc), 403)
+            target, status = await loop.run_in_executor(
+                None, functools.partial(ops.resolve_collision, dst_dir, filename, on_conflict, is_dir=False))
+            if status == "conflict":
+                return _err("CONFLICT", "file already exists", 409, conflicts=[filename])
+            if status == "skip":
+                results.append({"name": filename, "status": "skipped"})
+                continue
+            if target.is_dir():
+                return _err("BAD_REQUEST",
+                            "upload target conflicts with an existing directory", 400)
+
+            tmp = dst_dir / f".upload-{secrets.token_hex(4)}.part"
+            size = 0
+            too_large = False
+            committed = False
+            try:
+                f = await loop.run_in_executor(None, tmp.open, "wb")
+                try:
+                    while True:
+                        chunk = await part.read_chunk()
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > max_bytes:
+                            too_large = True
+                            break
+                        await loop.run_in_executor(None, f.write, chunk)
+                finally:
+                    await loop.run_in_executor(None, f.close)
+                if too_large:
+                    return _err("UPLOAD_TOO_LARGE",
+                                f"file exceeds {cfg.write.max_upload_mb} MB", 413)
+                await loop.run_in_executor(
+                    None, functools.partial(ops.rename, tmp, target, replace=status == "replace"))
+                committed = True
+            except OSError as exc:
+                log.info("filemanaty: upload write failed for %s: %s", filename, exc)
+                return _err("IO_ERROR", "upload write failed", 409)
+            finally:
+                if not committed:
+                    await loop.run_in_executor(None, functools.partial(tmp.unlink, missing_ok=True))
+            results.append({"name": target.name, "status": "done"})
+
+    if not results:
+        return _err("BAD_REQUEST", "no file parts in upload", 400)
+    return _ok({"results": results})
+
+
 def attach_routes(app: web.Application) -> None:
     """Attach all routes to the given aiohttp Application."""
     app.router.add_get(f"{API_PREFIX}/roots", _roots)
@@ -322,6 +749,15 @@ def attach_routes(app: web.Application) -> None:
     app.router.add_get(f"{API_PREFIX}/thumbnail", _thumbnail)
     app.router.add_get(f"{API_PREFIX}/preview", _preview)
     app.router.add_get(f"{API_PREFIX}/download", _download)
+    app.router.add_post(f"{API_PREFIX}/upload", _upload)
+    app.router.add_post(f"{API_PREFIX}/mkdir", _mkdir)
+    app.router.add_post(f"{API_PREFIX}/rename", _rename)
+    app.router.add_post(f"{API_PREFIX}/copy", _copy)
+    app.router.add_post(f"{API_PREFIX}/move", _move)
+    app.router.add_post(f"{API_PREFIX}/delete", _delete)
+    app.router.add_get(f"{API_PREFIX}/trash/list", _trash_list)
+    app.router.add_post(f"{API_PREFIX}/trash/restore", _trash_restore)
+    app.router.add_post(f"{API_PREFIX}/trash/purge", _trash_purge)
 
 
 def _attach_to_promptserver() -> None:

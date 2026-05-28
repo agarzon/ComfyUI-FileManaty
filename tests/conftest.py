@@ -32,3 +32,11 @@ def outside_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     p = tmp_path_factory.mktemp("outside")
     (p / "secret.txt").write_text("nothing to see")
     return p
+
+
+@pytest.fixture
+def tmp_root2(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A SECOND independent root for cross-root operation tests."""
+    p = tmp_path_factory.mktemp("root2")
+    (p / "existing.txt").write_text("already here")
+    return p
