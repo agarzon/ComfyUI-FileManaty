@@ -1,0 +1,22 @@
+services:
+  comfyui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Override with `docker compose build --build-arg COMFYUI_REF=v0.3.27`
+        COMFYUI_REF: master
+    image: comfyui-filemanaty-dev:latest
+    container_name: comfyui-filemanaty-dev
+    ports:
+      - "8188:8188"
+    volumes:
+      # The extension under development: bind-mount the repo into
+      # ComfyUI's custom_nodes so edits reload on container restart.
+      - ../:/opt/ComfyUI/custom_nodes/comfyui-filemanaty:rw
+      # Persistent ComfyUI user dir (configs, user data, thumb cache).
+      - comfyui_user:/opt/ComfyUI/user
+    restart: unless-stopped
+
+volumes:
+  comfyui_user:

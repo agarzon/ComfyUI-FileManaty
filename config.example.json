@@ -1,0 +1,22 @@
+{
+  "roots": [
+    {
+      "id": "outputs",
+      "label": "Outputs",
+      "path": "/absolute/path/to/ComfyUI/output"
+    },
+    {
+      "id": "inputs",
+      "label": "Inputs",
+      "path": "/absolute/path/to/ComfyUI/input"
+    }
+  ],
+  "files": {
+    "allow_hidden": false,
+    "image_extensions": [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif"]
+  },
+  "thumbnails": {
+    "enabled": true,
+    "max_dimension": 320
+  }
+}
