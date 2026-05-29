@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.3.1 — 2026-05-29
+
+Polish on top of v0.3.0. No behavior changes, no new features.
+
+### Fixed
+
+- `renderGrid` now uses the already-hoisted `childPath` local for the
+  clipboard-cut-highlight check and the drop-target wiring, instead of
+  re-computing it via `childPathOf(e.name)` at each call site. Functionally
+  identical; removes the incomplete-hoist tail from the v0.3.0 refactor.
+- `settings.subscribe`'s returned unsubscribe function now removes the
+  subscriber `Set` from the internal `Map` when it becomes empty, instead
+  of leaving empty `Set`s pinned forever. Negligible in practice (we have
+  a fixed catalog of 10 setting keys), but the cleanup matches the
+  semantic intent.
+
+### Docs
+
+- v0.3.0 CHANGELOG entry for `Open.DefaultRoot` clarified: the setting is
+  evaluated when the overlay initializes, which happens once per page
+  load. Changing it does not affect an already-open or close+reopened
+  overlay — only the next full page reload picks it up.
+
 ## v0.3.0 — 2026-05-28
 
 ComfyUI Settings system migration. Every user-facing preference now lives in
@@ -27,6 +50,9 @@ enforces and that browser clients cannot override.
 - Default-root-on-open is driven by `Open.DefaultRoot`. The literal value
   `"Last used"` preserves the previous behavior; a specific root id opens
   there directly. Stale root ids fall back to the first available root.
+  Evaluated when the overlay is initialized for the first time per page
+  load — close+reopen reuses the already-initialized state, so changing
+  this setting takes effect after the next page reload.
 - `web/filemanaty.js`: `localStorage.lastRoot` is now read only when
   `DefaultRoot = Last used`.
 

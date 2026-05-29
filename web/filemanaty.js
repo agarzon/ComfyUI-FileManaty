@@ -423,7 +423,7 @@ function renderGrid() {
         label.style.cssText = "position:absolute;bottom:0;left:0;right:0;padding:2px 6px;background:rgba(0,0,0,.7);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
         if (STATE.clipboard && STATE.clipboard.op === "cut"
             && STATE.clipboard.root === STATE.currentRoot
-            && STATE.clipboard.paths.includes(childPathOf(e.name))) {
+            && STATE.clipboard.paths.includes(childPath)) {
             cell.style.opacity = "0.45";
         }
         cell.appendChild(label);
@@ -434,7 +434,7 @@ function renderGrid() {
         cell.addEventListener("click", (ev) => onCellClick(e, ev));
         cell.addEventListener("dblclick", () => onCellDblClick(e));
         makeDraggable(cell, e.name);
-        if (e.type === "dir") makeDropTarget(cell, STATE.currentRoot, childPathOf(e.name));
+        if (e.type === "dir") makeDropTarget(cell, STATE.currentRoot, childPath);
         grid.appendChild(cell);
     }
     const sc = document.getElementById("fm-selcount");

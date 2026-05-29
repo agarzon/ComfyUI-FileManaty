@@ -170,5 +170,10 @@ export function set(key, value) {
 export function subscribe(key, cb) {
     if (!subscribers.has(key)) subscribers.set(key, new Set());
     subscribers.get(key).add(cb);
-    return () => subscribers.get(key).delete(cb);
+    return () => {
+        const subs = subscribers.get(key);
+        if (!subs) return;
+        subs.delete(cb);
+        if (subs.size === 0) subscribers.delete(key);
+    };
 }
