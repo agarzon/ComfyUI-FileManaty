@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v0.4.0"
+        required: true
+
+permissions:
+  contents: write          # lets GITHUB_TOKEN create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag and extract its CHANGELOG section
+        id: notes
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          v="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          awk -v v="$v" '
+            $0 ~ "^## v?" v " " { f=1; next }
+            f && /^## / { exit }
+            f { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG section found for $v" >&2
+            exit 1
+          fi
+          echo "--- release notes for $TAG ---"
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.notes.outputs.tag }}
+          name: ${{ steps.notes.outputs.tag }}
+          body_path: release-notes.md
