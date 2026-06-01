@@ -22,7 +22,7 @@ export function makeDropTarget(el, dstRoot, dstPath) {
         if ([...e.dataTransfer.types].includes(MIME)) {
             e.preventDefault();
             e.dataTransfer.dropEffect = (e.ctrlKey || e.metaKey) ? "copy" : "move";
-            el.style.outline = "2px solid #0a84ff";
+            el.style.outline = "2px solid var(--fm-accent)";
         }
     });
     el.addEventListener("dragleave", () => { el.style.outline = ""; });
