@@ -108,19 +108,19 @@ function buildOverlay() {
         "position:fixed",
         "inset:0",
         "z-index:9000",
-        "background:var(--p-content-background,#111)",
-        "color:var(--p-text-color,#ddd)",
+        "background:var(--fm-bg)",
+        "color:var(--fm-text)",
         "display:flex",
         "flex-direction:column",
     ].join(";");
     root.innerHTML = `
-        <div id="fm-header" style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid #333;background:#1a1a1a;">
+        <div id="fm-header" style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--fm-border);background:var(--fm-bg-elevated);">
             <strong>Files <span id="fm-bc" style="opacity:.7;font-weight:normal;margin-left:8px"></span></strong>
             <button id="fm-close" style="background:none;border:0;color:inherit;font-size:18px;cursor:pointer">✕</button>
         </div>
-        <div id="fm-tabs" style="display:flex;gap:4px;padding:6px 14px;border-bottom:1px solid #333;background:#1e1e1e;"></div>
+        <div id="fm-tabs" style="display:flex;gap:4px;padding:6px 14px;border-bottom:1px solid var(--fm-border);background:var(--fm-bg-elevated);"></div>
         <input id="fm-file-input" type="file" multiple style="display:none">
-        <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid #2a2a2a;font-size:12px;color:#aaa;">
+        <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
             <span id="fm-breadcrumb"></span>
             <span style="flex:1"></span>
             <span id="fm-selcount" style="opacity:.7;margin-right:6px"></span>
@@ -135,15 +135,15 @@ function buildOverlay() {
             <button id="fm-refresh" class="fm-tb">Refresh</button>
         </div>
         <div id="fm-body" style="flex:1;display:grid;grid-template-columns:200px 1fr 34%;min-height:0;">
-            <div id="fm-tree" style="overflow:auto;padding:8px;border-right:1px solid #2a2a2a;background:#161616;font-size:13px;"></div>
+            <div id="fm-tree" style="overflow:auto;padding:8px;border-right:1px solid var(--fm-border);background:var(--fm-bg);font-size:13px;"></div>
             <div id="fm-grid" style="overflow:auto;padding:10px;display:grid;gap:8px;align-content:start;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));"></div>
-            <div id="fm-preview" style="border-left:1px solid #2a2a2a;padding:14px;display:flex;flex-direction:column;gap:10px;background:#181818;"></div>
+            <div id="fm-preview" style="border-left:1px solid var(--fm-border);padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--fm-bg);"></div>
         </div>
     `;
     const style = document.createElement("style");
-    style.textContent = `#filemanaty-overlay .fm-tb{background:#2a2a2a;border:0;color:inherit;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px}
-#filemanaty-overlay .fm-tb:hover{background:#3a3a3a}
-#filemanaty-overlay .fm-tb.danger{color:#ff9a9a}`;
+    style.textContent = `#filemanaty-overlay .fm-tb{background:var(--fm-hover);border:0;color:inherit;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px}
+#filemanaty-overlay .fm-tb:hover{background:var(--fm-border)}
+#filemanaty-overlay .fm-tb.danger{color:var(--fm-danger)}`;
     root.appendChild(style);
     return root;
 }
@@ -218,7 +218,7 @@ async function initOverlay() {
     gridEl.addEventListener("dragover", (e) => {
         if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) {
             e.preventDefault();
-            gridEl.style.outline = "2px dashed #0a84ff";
+            gridEl.style.outline = "2px dashed var(--fm-accent)";
         }
     });
     gridEl.addEventListener("dragleave", () => { gridEl.style.outline = "none"; });
@@ -262,7 +262,7 @@ async function initOverlay() {
         const chosen = roots.find((r) => r.id === preferredId) || roots[0];
         await navigateTo(chosen.id, "");
     } else {
-        document.getElementById("fm-grid").innerHTML = "<div style='color:#888'>No roots configured.</div>";
+        document.getElementById("fm-grid").innerHTML = "<div style='color:var(--fm-text-muted)'>No roots configured.</div>";
     }
 }
 
@@ -273,7 +273,7 @@ function renderTabs(roots) {
         const tab = document.createElement("button");
         tab.textContent = r.label;
         tab.dataset.rootId = r.id;
-        tab.style.cssText = "background:#2a2a2a;border:0;color:inherit;padding:4px 12px;border-radius:3px;cursor:pointer;";
+        tab.style.cssText = "background:var(--fm-hover);border:0;color:inherit;padding:4px 12px;border-radius:3px;cursor:pointer;";
         tab.addEventListener("click", () => navigateTo(r.id, ""));
         el.appendChild(tab);
     }
@@ -379,8 +379,8 @@ function highlightTab() {
     const tabs = document.querySelectorAll("#fm-tabs button");
     tabs.forEach((t) => {
         const active = t.dataset.rootId === STATE.currentRoot;
-        t.style.background = active ? "#0a84ff" : "#2a2a2a";
-        t.style.color = active ? "white" : "inherit";
+        t.style.background = active ? "var(--fm-accent)" : "var(--fm-hover)";
+        t.style.color = active ? "var(--fm-on-accent)" : "inherit";
     });
 }
 
@@ -427,7 +427,7 @@ function renderGrid() {
     for (const e of sortedEntries()) {
         const cell = document.createElement("div");
         cell.dataset.name = e.name;
-        cell.style.cssText = "position:relative;aspect-ratio:1;background:#222;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;";
+        cell.style.cssText = "position:relative;aspect-ratio:1;background:var(--fm-bg);border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;";
         const childPath = STATE.currentPath ? `${STATE.currentPath}/${e.name}` : e.name;
         if (e.kind === "image" && showThumbs) {
             const img = document.createElement("img");
@@ -453,7 +453,7 @@ function renderGrid() {
         }
         cell.appendChild(label);
         if (STATE.selected.has(e.name)) {
-            cell.style.outline = "2px solid #0a84ff";
+            cell.style.outline = "2px solid var(--fm-accent)";
             cell.style.outlineOffset = "2px";
         }
         cell.addEventListener("click", (ev) => onCellClick(e, ev));
@@ -489,7 +489,7 @@ function renderPreview() {
     const onlyName = STATE.selected.size === 1 ? [...STATE.selected][0] : null;
     const sel = onlyName ? STATE.entries.find((e) => e.name === onlyName) : null;
     if (!sel) {
-        el.innerHTML = "<div style='color:#666'>Select a file.</div>";
+        el.innerHTML = "<div style='color:var(--fm-text-muted)'>Select a file.</div>";
         return;
     }
     const childPath = STATE.currentPath ? `${STATE.currentPath}/${sel.name}` : sel.name;
@@ -497,28 +497,28 @@ function renderPreview() {
     const dateStr = new Date(sel.mtime * 1000).toLocaleString();
     if (sel.kind === "image") {
         el.innerHTML = `
-            <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#0e0e0e;border-radius:4px;min-height:0;">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--fm-bg);border-radius:4px;min-height:0;">
                 <img src="${previewURL(STATE.currentRoot, childPath)}" style="max-width:100%;max-height:100%;object-fit:contain;">
             </div>
             <div style="font-size:12px;line-height:1.6;">
                 <div><strong>${escapeHtml(sel.name)}</strong></div>
-                <div style="color:#aaa">${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
+                <div style="color:var(--fm-text-muted)">${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
             </div>
             <div style="display:flex;gap:6px;">
-                <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:#0a84ff;color:white;padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
+                <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:var(--fm-accent);color:var(--fm-on-accent);padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
             </div>
         `;
     } else if (sel.kind === "folder") {
-        el.innerHTML = `<div><strong>${escapeHtml(sel.name)}</strong> (folder)</div><div style="color:#aaa;font-size:12px">Double-click to open.</div>`;
+        el.innerHTML = `<div><strong>${escapeHtml(sel.name)}</strong> (folder)</div><div style="color:var(--fm-text-muted);font-size:12px">Double-click to open.</div>`;
     } else {
         el.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;flex:1;font-size:60px;opacity:.5">📄</div>
             <div style="font-size:12px;line-height:1.6;">
                 <div><strong>${escapeHtml(sel.name)}</strong></div>
-                <div style="color:#aaa">${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
+                <div style="color:var(--fm-text-muted)">${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
             </div>
             <div style="display:flex;gap:6px;">
-                <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:#0a84ff;color:white;padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
+                <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:var(--fm-accent);color:var(--fm-on-accent);padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
             </div>
         `;
     }
@@ -580,7 +580,7 @@ app.registerExtension({
             render: (container) => {
                 container.innerHTML = `
                     <div style="padding:10px;">
-                        <button id="fm-sidebar-open" style="width:100%;padding:8px;background:#0a84ff;color:white;border:0;border-radius:4px;cursor:pointer;">
+                        <button id="fm-sidebar-open" style="width:100%;padding:8px;background:var(--fm-accent);color:var(--fm-on-accent);border:0;border-radius:4px;cursor:pointer;">
                             Open File Manager
                         </button>
                     </div>
