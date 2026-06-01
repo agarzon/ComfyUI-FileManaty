@@ -25,12 +25,12 @@ Thumbs.db
 config.json
 thumbnail_cache/
 
-
 # Playwright MCP smoke-test output
 .playwright-mcp/
 
 # Claude Code (local only)
 .claude/
+CLAUDE.md
 
 # Design docs (kept out of public repo)
 docs/superpowers/

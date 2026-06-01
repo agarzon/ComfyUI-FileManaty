@@ -70,7 +70,7 @@ If the config is malformed or invalid, the extension logs a clear error and fall
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pip install -e ".[test]"
 .venv/bin/pytest -v
 ```
 
