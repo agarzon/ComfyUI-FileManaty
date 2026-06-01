@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any, Optional
 
 log = logging.getLogger("filemanaty")
@@ -117,3 +118,27 @@ def summarize(prompt: Any) -> dict[str, Any]:
                 fields["loras"].append(name)
 
     return fields
+
+
+def _extract_png(path: Path) -> Optional[dict]:
+    from PIL import Image
+    with Image.open(path) as img:
+        text = dict(getattr(img, "text", {}) or {})
+    if not text:
+        return None
+    return _build_envelope(text)
+
+
+def extract(path: Path) -> Optional[dict]:
+    """Public entry: read embedded chunks from a media file -> envelope or None.
+
+    Dispatches by file suffix. Never raises — any extractor error logs and yields
+    None so a bad file can never break the caller.
+    """
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".png":
+            return _extract_png(path)
+    except Exception as exc:  # noqa: BLE001 - extraction must never propagate
+        log.info("filemanaty: metadata extraction failed for %s: %s", path.name, exc)
+    return None

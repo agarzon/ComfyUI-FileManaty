@@ -68,3 +68,37 @@ def test_build_envelope_skips_oversized_field():
     huge = "x" * (metadata.MAX_RAW_BYTES + 1)
     env = metadata._build_envelope({"prompt": huge})
     assert env["prompt"] is None
+
+
+from PIL import Image
+from PIL.PngImagePlugin import PngInfo
+
+
+def _make_png(path: Path, *, workflow=None, prompt=None) -> None:
+    info = PngInfo()
+    if workflow is not None:
+        info.add_text("workflow", json.dumps(workflow))
+    if prompt is not None:
+        info.add_text("prompt", json.dumps(prompt))
+    Image.new("RGB", (8, 8), "red").save(path, "PNG", pnginfo=info)
+
+
+def test_extract_png_with_workflow_and_prompt(tmp_path):
+    p = tmp_path / "gen.png"
+    _make_png(p, workflow={"nodes": []}, prompt=STD_PROMPT)
+    env = metadata.extract(p)
+    assert env is not None
+    assert env["workflow"] == {"nodes": []}
+    assert env["prompt"] == STD_PROMPT
+
+
+def test_extract_png_without_text_returns_none(tmp_path):
+    p = tmp_path / "plain.png"
+    Image.new("RGB", (8, 8), "blue").save(p, "PNG")
+    assert metadata.extract(p) is None
+
+
+def test_extract_unknown_extension_returns_none(tmp_path):
+    p = tmp_path / "notes.txt"
+    p.write_text("hello")
+    assert metadata.extract(p) is None
