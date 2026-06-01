@@ -129,6 +129,37 @@ def _extract_png(path: Path) -> Optional[dict]:
     return _build_envelope(text)
 
 
+def _exif_strings(exif) -> list[str]:
+    """All string EXIF values from the base IFD and the Exif sub-IFD (UserComment)."""
+    values = list(exif.values())
+    try:
+        values.extend(exif.get_ifd(0x8769).values())  # 0x8769 = Exif IFD pointer
+    except Exception:  # noqa: BLE001 - absent sub-IFD is fine
+        pass
+    out: list[str] = []
+    for v in values:
+        if isinstance(v, bytes):
+            v = v.decode("utf-8", "ignore")
+        if isinstance(v, str):
+            out.append(v)
+    return out
+
+
+def _extract_exif(path: Path) -> Optional[dict]:
+    from PIL import Image
+    with Image.open(path) as img:
+        exif = img.getexif()
+    raw: dict[str, str] = {}
+    for value in _exif_strings(exif):
+        for key in ("workflow", "prompt"):
+            prefix = key + ":"
+            if value.startswith(prefix):
+                raw[key] = value[len(prefix):]
+    if not raw:
+        return None
+    return _build_envelope(raw)
+
+
 def extract(path: Path) -> Optional[dict]:
     """Public entry: read embedded chunks from a media file -> envelope or None.
 
@@ -139,6 +170,8 @@ def extract(path: Path) -> Optional[dict]:
     try:
         if suffix == ".png":
             return _extract_png(path)
+        if suffix in (".webp", ".jpg", ".jpeg"):
+            return _extract_exif(path)
     except Exception as exc:  # noqa: BLE001 - extraction must never propagate
         log.info("filemanaty: metadata extraction failed for %s: %s", path.name, exc)
     return None

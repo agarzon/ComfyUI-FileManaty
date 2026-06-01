@@ -102,3 +102,26 @@ def test_extract_unknown_extension_returns_none(tmp_path):
     p = tmp_path / "notes.txt"
     p.write_text("hello")
     assert metadata.extract(p) is None
+
+
+def _make_jpeg_with_exif(path: Path, *, prompt) -> None:
+    img = Image.new("RGB", (8, 8), "green")
+    exif = img.getexif()
+    # ComfyUI's convention: the embedded value is "<key>:<json>". We store it in
+    # ImageDescription (0x010e); the extractor scans by prefix, not by tag id.
+    exif[0x010e] = "prompt:" + json.dumps(prompt)
+    img.save(path, "JPEG", exif=exif)
+
+
+def test_extract_jpeg_reads_prompt_from_exif(tmp_path):
+    p = tmp_path / "gen.jpg"
+    _make_jpeg_with_exif(p, prompt=STD_PROMPT)
+    env = metadata.extract(p)
+    assert env is not None
+    assert env["prompt"] == STD_PROMPT
+
+
+def test_extract_jpeg_without_metadata_returns_none(tmp_path):
+    p = tmp_path / "plain.jpg"
+    Image.new("RGB", (8, 8), "green").save(p, "JPEG")
+    assert metadata.extract(p) is None
