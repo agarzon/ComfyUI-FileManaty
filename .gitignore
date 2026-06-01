@@ -34,3 +34,6 @@ CLAUDE.md
 
 # Design docs (kept out of public repo)
 docs/superpowers/
+
+# Dev: real-life sample files bind-mounted into the container (not tracked)
+docker/sample-files/

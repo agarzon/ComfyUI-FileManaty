@@ -12,6 +12,17 @@
   MP4/WebM/MKV/MOV (PyAV, optional — degrades gracefully when PyAV is absent). Extraction
   never breaks the panel: unknown or custom graphs degrade each field to `—`.
 
+### Fixed
+
+- Pressing Esc to cancel a dialog (e.g. the delete-to-Trash confirmation) no
+  longer closes the whole file manager. Dialogs now trap Esc and resolve as
+  cancel; the overlay's Esc handler defers to any open dialog.
+- The selection can now be cleared: clicking empty grid space deselects, and Esc
+  clears the selection before (a second Esc) closes the overlay — so the toolbar
+  no longer stays stuck at "1 selected".
+- The Refresh button now refreshes the folder tree as well as the grid.
+- The Refresh button gains an icon, for consistency with the other toolbar buttons.
+
 ## v0.4.1 — 2026-06-01
 
 ### Fixed

@@ -1,7 +1,12 @@
 import { escapeHtml } from "./filemanaty.js";
 import { fetchTrash, restoreTrash, purgeTrash } from "./api.js";
 
-function overlayShell(innerHTML) {
+// Number of dialogs currently open, so the overlay's global Esc handler can defer
+// to them (a dialog handles its own Esc rather than closing the whole app).
+let openDialogs = 0;
+export function isDialogOpen() { return openDialogs > 0; }
+
+function overlayShell(innerHTML, onEscape) {
     const back = document.createElement("div");
     back.style.cssText = "position:fixed;inset:0;z-index:9500;background:var(--fm-scrim);display:flex;align-items:center;justify-content:center;";
     const box = document.createElement("div");
@@ -9,7 +14,26 @@ function overlayShell(innerHTML) {
     box.innerHTML = innerHTML;
     back.appendChild(box);
     document.body.appendChild(back);
-    return { back, box, close: () => back.remove() };
+    openDialogs++;
+    let closed = false;
+    const close = () => {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener("keydown", onKey, true);
+        openDialogs = Math.max(0, openDialogs - 1);
+        back.remove();
+    };
+    // Capture phase: Esc cancels THIS dialog and is stopped before it reaches the
+    // overlay's bubble-phase Esc handler (which would otherwise close the whole app).
+    const onKey = (e) => {
+        if (e.key !== "Escape") return;
+        e.stopPropagation();
+        e.preventDefault();
+        close();
+        if (onEscape) onEscape();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return { back, box, close };
 }
 
 // Resolve with the typed string, or null if cancelled.
@@ -21,7 +45,7 @@ export function promptText(title, initial = "") {
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
                 <button id="fm-dlg-cancel" style="padding:5px 12px;background:var(--fm-hover);border:0;color:var(--fm-text);border-radius:4px;cursor:pointer">Cancel</button>
                 <button id="fm-dlg-ok" style="padding:5px 12px;background:var(--fm-accent);border:0;color:var(--fm-on-accent);border-radius:4px;cursor:pointer">OK</button>
-            </div>`);
+            </div>`, () => resolve(null));
         const input = box.querySelector("#fm-dlg-input");
         input.value = initial;
         input.focus();
@@ -29,7 +53,7 @@ export function promptText(title, initial = "") {
         const ok = () => { const v = input.value.trim(); close(); resolve(v || null); };
         box.querySelector("#fm-dlg-ok").onclick = ok;
         box.querySelector("#fm-dlg-cancel").onclick = () => { close(); resolve(null); };
-        input.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") ok(); if (e.key === "Escape") { close(); resolve(null); } };
+        input.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") ok(); };
     });
 }
 
@@ -42,7 +66,7 @@ export function confirmDialog(title, message, { danger = false } = {}) {
             <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button id="fm-dlg-cancel" style="padding:5px 12px;background:var(--fm-hover);border:0;color:var(--fm-text);border-radius:4px;cursor:pointer">Cancel</button>
                 <button id="fm-dlg-ok" style="padding:5px 12px;background:${danger ? "var(--fm-danger)" : "var(--fm-accent)"};border:0;color:var(--fm-on-accent);border-radius:4px;cursor:pointer">Confirm</button>
-            </div>`);
+            </div>`, () => resolve(false));
         box.querySelector("#fm-dlg-ok").onclick = () => { close(); resolve(true); };
         box.querySelector("#fm-dlg-cancel").onclick = () => { close(); resolve(false); };
     });
@@ -63,7 +87,7 @@ export function conflictDialog(names) {
                 <button data-p="keep_both" style="padding:5px 12px;background:#2a6;border:0;color:var(--fm-on-accent);border-radius:4px;cursor:pointer">Keep both</button><!-- status color -->
                 <button data-p="replace" style="padding:5px 12px;background:var(--fm-danger);border:0;color:var(--fm-on-accent);border-radius:4px;cursor:pointer">Replace</button>
             </div>
-            <div style="text-align:right;margin-top:8px"><button id="fm-dlg-cancel" style="padding:3px 10px;background:none;border:0;color:var(--fm-text-muted);cursor:pointer">Cancel</button></div>`);
+            <div style="text-align:right;margin-top:8px"><button id="fm-dlg-cancel" style="padding:3px 10px;background:none;border:0;color:var(--fm-text-muted);cursor:pointer">Cancel</button></div>`, () => resolve(null));
         box.querySelectorAll("button[data-p]").forEach((b) => {
             b.onclick = () => {
                 const all = box.querySelector("#fm-dlg-all").checked;

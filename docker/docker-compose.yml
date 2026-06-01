@@ -16,6 +16,11 @@ services:
       - ../:/opt/ComfyUI/custom_nodes/comfyui-filemanaty:rw
       # Persistent ComfyUI user dir (configs, user data, thumb cache).
       - comfyui_user:/opt/ComfyUI/user
+      # Sample real-life files: drop generated images here on the host and they
+      # appear in FileManaty's Outputs/Inputs roots. Gitignored (see .gitignore)
+      # so test content and mutations never touch git.
+      - ./sample-files/output:/opt/ComfyUI/output:rw
+      - ./sample-files/input:/opt/ComfyUI/input:rw
     restart: unless-stopped
 
 volumes:
