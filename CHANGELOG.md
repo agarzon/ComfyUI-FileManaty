@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Overlay, dialogs, context menu, and toasts now follow ComfyUI's active theme
+  (light/dark/custom) via its palette tokens, instead of being hard-coded dark.
+  Colors are driven by a set of semantic `--fm-*` variables aliasing ComfyUI's
+  PrimeVue `--p-*` tokens, so the file manager recolors live when the theme changes.
+
 ## v0.3.2 — 2026-06-01
 
 First public release. No runtime behavior changes since v0.3.1.
