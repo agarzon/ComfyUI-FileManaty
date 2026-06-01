@@ -9,18 +9,18 @@ document.addEventListener("click", destroy);
 function show(x, y, items) {
     destroy();
     const menu = document.createElement("div");
-    menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:9700;background:#232733;border:1px solid #444;border-radius:6px;padding:4px 0;min-width:160px;box-shadow:0 6px 18px rgba(0,0,0,.5);font-size:13px;color:#ddd`;
+    menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:9700;background:var(--fm-bg-elevated);border:1px solid var(--fm-border);border-radius:6px;padding:4px 0;min-width:160px;box-shadow:0 6px 18px rgba(0,0,0,.5);font-size:13px;color:var(--fm-text)`;
     for (const it of items) {
         if (it.separator) {
             const sep = document.createElement("div");
-            sep.style.cssText = "height:1px;background:#444;margin:4px 0";
+            sep.style.cssText = "height:1px;background:var(--fm-border);margin:4px 0";
             menu.appendChild(sep);
             continue;
         }
         const row = document.createElement("div");
         row.textContent = it.label;
-        row.style.cssText = `padding:5px 14px;cursor:pointer;${it.danger ? "color:#ff9a9a" : ""}`;
-        row.onmouseenter = () => (row.style.background = "rgba(120,160,255,.25)");
+        row.style.cssText = `padding:5px 14px;cursor:pointer;${it.danger ? "color:var(--fm-danger)" : ""}`;
+        row.onmouseenter = () => (row.style.background = "var(--fm-accent-soft)");
         row.onmouseleave = () => (row.style.background = "transparent");
         row.onclick = () => { destroy(); it.onClick(); };
         menu.appendChild(row);
