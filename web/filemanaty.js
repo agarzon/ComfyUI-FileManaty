@@ -2,7 +2,7 @@ import { app } from "../../scripts/app.js";
 import { fetchRoots, fetchList, thumbnailURL, previewURL, downloadURL, fetchMetadata, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
 import { doCopy, doCut, doPaste, runWithConflicts } from "./clipboard.js";
 import { clickSelect, selectAll } from "./selection.js";
-import { promptText, confirmDialog, toast, trashView } from "./dialogs.js";
+import { promptText, confirmDialog, toast, trashView, isDialogOpen } from "./dialogs.js";
 import { attachContextMenu } from "./contextmenu.js";
 import { renderTree } from "./tree.js";
 import { makeDraggable, makeDropTarget } from "./dnd.js";
@@ -132,7 +132,7 @@ function buildOverlay() {
             <button class="fm-tb" data-act="paste">📋 Paste</button>
             <button class="fm-tb" data-act="trash">♻ Trash</button>
             <button class="fm-tb danger" data-act="delete">🗑 Delete</button>
-            <button id="fm-refresh" class="fm-tb">Refresh</button>
+            <button id="fm-refresh" class="fm-tb">↻ Refresh</button>
         </div>
         <div id="fm-body" style="flex:1;display:grid;grid-template-columns:200px 1fr 34%;min-height:0;">
             <div id="fm-tree" style="overflow:auto;padding:8px;border-right:1px solid var(--fm-border);background:var(--fm-bg);font-size:13px;"></div>
@@ -152,7 +152,14 @@ async function initOverlay() {
     document.getElementById("fm-close").addEventListener("click", closeOverlay);
     document.addEventListener("keydown", (e) => {
         if (!STATE.open) return;
-        if (e.key === "Escape") { closeOverlay(); return; }
+        if (e.key === "Escape") {
+            if (isDialogOpen()) return;              // a dialog handles its own Esc
+            if (STATE.selected.size) {               // Esc clears selection before closing
+                STATE.selected.clear(); STATE.anchorName = null; rerender();
+                e.preventDefault(); return;
+            }
+            closeOverlay(); return;
+        }
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
             selectAll(); e.preventDefault(); return;
         }
@@ -229,6 +236,12 @@ async function initOverlay() {
             uploadFileList(e.dataTransfer.files).catch((x) => toast(x.message, "error"));
         }
     });
+    // Click on empty grid space (not a cell) clears the current selection.
+    gridEl.addEventListener("click", (e) => {
+        if (e.target === gridEl && STATE.selected.size) {
+            STATE.selected.clear(); STATE.anchorName = null; rerender();
+        }
+    });
 
     attachContextMenu({
         rerender,
@@ -287,8 +300,7 @@ export async function navigateTo(rootId, relPath) {
     try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {}
     highlightTab();
     updateWritableUI();
-    renderTree().catch((e) => console.error("filemanaty tree render failed:", e));
-    await refresh();
+    await refresh();   // refresh() re-renders the tree too
 }
 
 // Disable write actions in the toolbar when the current root is read-only.
@@ -394,6 +406,7 @@ export async function refresh() {
     renderBreadcrumb(path);
     renderGrid();
     renderPreview();
+    renderTree().catch((e) => console.error("filemanaty tree render failed:", e));
 }
 
 function renderBreadcrumb(path) {
