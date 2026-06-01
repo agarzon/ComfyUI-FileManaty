@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.6 — 2026-06-01
+
+### Fixed
+
+- **Copy workflow/prompt JSON now works on non-HTTPS servers.** The metadata
+  card's Copy buttons relied on `navigator.clipboard`, which browsers expose only
+  in secure contexts (HTTPS or localhost). On a ComfyUI server reached over plain
+  HTTP at a LAN address it is `undefined`, so the buttons silently did nothing.
+  Added a `document.execCommand("copy")` fallback (via a temporary textarea) and a
+  "Copy failed" toast so the action works — and reports — in insecure contexts too.
+
 ## v0.5.5 — 2026-06-01
 
 ### Added

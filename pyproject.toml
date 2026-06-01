@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfyui-filemanaty"
-version = "0.5.5"
+version = "0.5.6"
 description = "In-browser file manager for ComfyUI — browse, preview, upload, rename, move, copy, and trash files in configured roots"
 readme = "README.md"
 license = { text = "MIT" }

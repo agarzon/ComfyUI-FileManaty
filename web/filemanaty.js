@@ -534,7 +534,29 @@ function metaCardHtml(data) {
 function copyJSON(obj) {
     if (obj == null) return;
     const text = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
-    navigator.clipboard?.writeText(text).then(() => toast("Copied JSON"));
+    // navigator.clipboard exists only in secure contexts (HTTPS/localhost). ComfyUI is
+    // often served over plain HTTP on a LAN address, where it's undefined — fall back to
+    // execCommand, which works inside this click handler's user gesture.
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text)
+            .then(() => toast("Copied JSON"))
+            .catch(() => legacyCopy(text));
+        return;
+    }
+    legacyCopy(text);
+}
+
+function legacyCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { /* ok stays false */ }
+    ta.remove();
+    toast(ok ? "Copied JSON" : "Copy failed");
 }
 
 async function loadMetadata(root, path) {
