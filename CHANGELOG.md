@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.5 — 2026-06-01
+
+### Added
+
+- **Load workflow on canvas.** The preview metadata card now has a "Load on
+  canvas" button (shown whenever a file carries an embedded `workflow` or
+  `prompt`). It hands the raw file to ComfyUI's own load-from-file path, so any
+  format/embedding ComfyUI supports is loaded onto the node editor, then closes
+  the file manager so the canvas is visible. Frontend-only — reuses the existing
+  `/download` route, no new backend surface.
+
 ## v0.5.0 — 2026-06-01
 
 ### Added
