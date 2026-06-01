@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from aiohttp import FormData, web
 from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 
 from filemanaty import api as api_module
 from filemanaty.config import Config, FilesConfig, RootConfig, ThumbnailsConfig, WriteConfig
@@ -1081,3 +1082,63 @@ async def test_rw_root_still_writable(ro_rw_client):
     resp = await _post(client, "/filemanaty/api/v1/mkdir", {"root": "rw", "path": "", "name": "fresh"})
     assert resp.status == 200
     assert (await resp.json())["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# GET /metadata
+# ---------------------------------------------------------------------------
+
+_API_PROMPT = {
+    "3": {"class_type": "KSampler",
+          "inputs": {"seed": 7, "positive": ["6", 0], "negative": ["7", 0]}},
+    "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}},
+    "7": {"class_type": "CLIPTextEncode", "inputs": {"text": "bye"}},
+}
+
+
+def _write_png_with_meta(path: Path) -> None:
+    info = PngInfo()
+    info.add_text("prompt", json.dumps(_API_PROMPT))
+    Image.new("RGB", (8, 8), "red").save(path, "PNG", pnginfo=info)
+
+
+async def test_metadata_png_returns_fields_and_raw(client_factory, tmp_root):
+    _write_png_with_meta(tmp_root / "gen.png")
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/metadata?root=t&path=gen.png")
+    assert resp.status == 200
+    data = (await resp.json())["data"]
+    assert data["fields"]["positive"] == "hello"
+    assert data["fields"]["seed"] == 7
+    assert data["raw"]["prompt"] == _API_PROMPT
+
+
+async def test_metadata_no_embedded_returns_empty(client_factory, tmp_root):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/metadata?root=t&path=top.txt")
+    assert resp.status == 200
+    data = (await resp.json())["data"]
+    assert data["raw"] is None
+    assert data["fields"] == {
+        "positive": None, "negative": None, "seed": None, "model": None, "loras": []}
+
+
+async def test_metadata_missing_file_returns_404(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/metadata?root=t&path=nope.png")
+    assert resp.status == 404
+    assert (await resp.json())["error"]["code"] == "NOT_FOUND"
+
+
+async def test_metadata_escape_returns_403(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/metadata?root=t&path=../escape")
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "ACCESS_DENIED"
+
+
+async def test_metadata_missing_param_returns_400(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/metadata?root=t")
+    assert resp.status == 400
+    assert (await resp.json())["error"]["code"] == "BAD_REQUEST"
