@@ -19,6 +19,7 @@ from typing import Any, Optional
 
 from aiohttp import web
 
+from filemanaty import metadata
 from filemanaty import operations as ops
 from filemanaty.config import Config, RootConfig, load_config
 from filemanaty.security import (
@@ -359,6 +360,27 @@ async def _preview(request: web.Request) -> web.Response:
 
 async def _download(request: web.Request) -> web.Response:
     return await _file_endpoint(request, attachment=True)
+
+
+async def _metadata(request: web.Request) -> web.Response:
+    root_id = request.query.get("root")
+    raw_path = request.query.get("path")
+    if root_id is None or raw_path is None:
+        return _err("BAD_REQUEST", "missing 'root' or 'path' query param", 400)
+    cfg = _get_config()
+    try:
+        root = _find_root(cfg, root_id)
+        target = safe_resolve(root.path, _strip_path(raw_path))
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    if not target.is_file():
+        return _err("NOT_FOUND", "no such file", 404)
+    if (resp := _reject_hidden(target, root.path)) is not None:
+        return resp
+    loop = asyncio.get_running_loop()
+    raw = await loop.run_in_executor(None, metadata.extract, target)
+    prompt = raw.get("prompt") if raw else None
+    return _ok({"fields": metadata.summarize(prompt), "raw": raw})
 
 
 async def _mkdir(request: web.Request) -> web.Response:
@@ -795,6 +817,7 @@ def attach_routes(app: web.Application) -> None:
     app.router.add_get(f"{API_PREFIX}/thumbnail", _thumbnail)
     app.router.add_get(f"{API_PREFIX}/preview", _preview)
     app.router.add_get(f"{API_PREFIX}/download", _download)
+    app.router.add_get(f"{API_PREFIX}/metadata", _metadata)
     app.router.add_post(f"{API_PREFIX}/upload", _upload)
     app.router.add_post(f"{API_PREFIX}/mkdir", _mkdir)
     app.router.add_post(f"{API_PREFIX}/rename", _rename)

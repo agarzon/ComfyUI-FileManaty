@@ -1,5 +1,5 @@
 import { app } from "../../scripts/app.js";
-import { fetchRoots, fetchList, thumbnailURL, previewURL, downloadURL, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
+import { fetchRoots, fetchList, thumbnailURL, previewURL, downloadURL, fetchMetadata, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
 import { doCopy, doCut, doPaste, runWithConflicts } from "./clipboard.js";
 import { clickSelect, selectAll } from "./selection.js";
 import { promptText, confirmDialog, toast, trashView } from "./dialogs.js";
@@ -488,6 +488,66 @@ function onCellDblClick(entry) {
     }
 }
 
+// Guards against a slow metadata fetch painting over a newer selection: each
+// renderPreview bumps the token; a resolved fetch only paints if it still matches.
+let metaToken = 0;
+
+function metaField(label, value) {
+    const shown = value == null || value === "" ? "—" : escapeHtml(value);
+    return `<div><span style="color:var(--fm-text-muted)">${label}:</span> ${shown}</div>`;
+}
+
+function metaCardHtml(data) {
+    const f = data.fields;
+    const loras = f.loras && f.loras.length ? f.loras.join(", ") : null;
+    const btns = [];
+    const btnStyle = "background:var(--fm-bg-elevated);color:var(--fm-text);border:1px solid var(--fm-border);padding:4px 10px;border-radius:3px;font-size:12px;cursor:pointer;";
+    if (data.raw.workflow != null) btns.push(`<button data-copy="workflow" style="${btnStyle}">Copy workflow JSON</button>`);
+    if (data.raw.prompt != null) btns.push(`<button data-copy="prompt" style="${btnStyle}">Copy prompt JSON</button>`);
+    return `
+        <div style="border-top:1px solid var(--fm-border);margin-top:8px;padding-top:8px;font-size:12px;line-height:1.6;display:flex;flex-direction:column;gap:2px;">
+            ${metaField("Positive", f.positive)}
+            ${metaField("Negative", f.negative)}
+            ${metaField("Seed", f.seed)}
+            ${metaField("Model", f.model)}
+            ${metaField("LoRAs", loras)}
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">${btns.join("")}</div>
+        </div>`;
+}
+
+function copyJSON(obj) {
+    if (obj == null) return;
+    const text = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+    navigator.clipboard?.writeText(text).then(() => toast("Copied JSON"));
+}
+
+async function loadMetadata(root, path) {
+    const token = ++metaToken;
+    const muted = (msg) => `<div style="color:var(--fm-text-muted);font-size:12px">${msg}</div>`;
+    let data;
+    try {
+        data = await fetchMetadata(root, path);
+    } catch {
+        paintMeta(token, muted("Metadata unavailable."));
+        return;
+    }
+    if (!data.raw) {
+        paintMeta(token, muted("No embedded workflow metadata."));
+        return;
+    }
+    paintMeta(token, metaCardHtml(data));
+    const el = document.getElementById("fm-meta");
+    if (!el || token !== metaToken) return;
+    el.querySelector("[data-copy=workflow]")?.addEventListener("click", () => copyJSON(data.raw.workflow));
+    el.querySelector("[data-copy=prompt]")?.addEventListener("click", () => copyJSON(data.raw.prompt));
+}
+
+function paintMeta(token, html) {
+    if (token !== metaToken) return;  // stale fetch — selection moved on
+    const el = document.getElementById("fm-meta");
+    if (el) el.innerHTML = html;
+}
+
 function renderPreview() {
     const el = document.getElementById("fm-preview");
     const onlyName = STATE.selected.size === 1 ? [...STATE.selected][0] : null;
@@ -511,7 +571,9 @@ function renderPreview() {
             <div style="display:flex;gap:6px;">
                 <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:var(--fm-accent);color:var(--fm-on-accent);padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
             </div>
+            <div id="fm-meta" style="color:var(--fm-text-muted);font-size:12px;">Loading metadata…</div>
         `;
+        loadMetadata(STATE.currentRoot, childPath);
     } else if (sel.kind === "folder") {
         el.innerHTML = `<div><strong>${escapeHtml(sel.name)}</strong> (folder)</div><div style="color:var(--fm-text-muted);font-size:12px">Double-click to open.</div>`;
     } else {

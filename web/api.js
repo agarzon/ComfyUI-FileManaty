@@ -46,6 +46,11 @@ export function downloadURL(rootId, relPath) {
     return `${BASE}/download?${q.toString()}`;
 }
 
+export async function fetchMetadata(rootId, relPath) {
+    const q = new URLSearchParams({ root: rootId, path: relPath });
+    return getJSON(`${BASE}/metadata?${q.toString()}`);
+}
+
 async function postJSON(path, body, { query } = {}) {
     const url = query ? `${BASE}${path}?${new URLSearchParams(query)}` : `${BASE}${path}`;
     const resp = await fetch(url, {
