@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfyui-filemanaty"
-version = "0.1.0"
-description = "Read-only file viewer extension for ComfyUI"
+version = "0.3.2"
+description = "In-browser file manager for ComfyUI — browse, preview, upload, rename, move, copy, and trash files in configured roots"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
@@ -28,7 +28,7 @@ test = [
 ]
 
 [project.urls]
-Repository = "https://github.com/<owner>/ComfyUI-FileManaty"
+Repository = "https://github.com/agarzon/ComfyUI-FileManaty"
 
 [tool.setuptools.packages.find]
 include = ["filemanaty*"]

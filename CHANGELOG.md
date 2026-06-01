@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.2 — 2026-06-01
+
+First public release. No runtime behavior changes since v0.3.1.
+
+### Added
+
+- Project visual identity (manatee mascot banner) and an origin story in the README.
+
+### Changed
+
+- Contributor/test dependencies moved into a `[project.optional-dependencies]` `test`
+  extra (`pip install -e ".[test]"`); removed the standalone `requirements-dev.txt`.
+- Package metadata: repository URL, description, and version updated for publication.
+
 ## v0.3.1 — 2026-05-29
 
 Polish on top of v0.3.0. No behavior changes, no new features.

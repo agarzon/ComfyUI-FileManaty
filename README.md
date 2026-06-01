@@ -1,6 +1,23 @@
-# ComfyUI-FileManaty
+<p align="center">
+  <img src="assets/filemanaty-banner.jpg" alt="File Manaty — the gentle file-manatee for ComfyUI" width="100%">
+</p>
 
-A read-only file viewer for ComfyUI. Browse approved folders, see image thumbnails, preview full-res images, and download files — all from inside the ComfyUI web UI, without OS access to the host.
+<h1 align="center">ComfyUI-FileManaty</h1>
+
+<p align="center">
+  <em>The gentle file-manatee for ComfyUI.</em><br>
+  Browse, preview, organize, upload, rename, move, copy, and trash the files in your
+  ComfyUI roots — right inside the web UI, without OS access to the host.
+</p>
+
+## The story behind the name
+
+Yes, it's *manatee* — and yes, **FileManaty** is spelled that way on purpose. The name is a
+small pile of puns: a **file manager** that's secretly a **manatee** 🐾, with a dash of
+**mana** (a little generative magic for its ComfyUI habitat). It's the slow, calm, dependable
+cousin of 🦭 **Wallrus** — another chunky, friendly sea mammal that happily bends its own
+spelling for the joke (WALL + WALRUS). Unhurried and easygoing is exactly how you want
+something that looks after your files.
 
 ## Install
 
@@ -10,7 +27,7 @@ Search for `ComfyUI-FileManaty` and install. Restart ComfyUI.
 ### Option B: clone
 ```
 cd ComfyUI/custom_nodes
-git clone https://github.com/<owner>/ComfyUI-FileManaty.git
+git clone https://github.com/agarzon/ComfyUI-FileManaty.git
 ```
 Restart ComfyUI.
 
