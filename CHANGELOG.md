@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Preview panel now shows embedded ComfyUI metadata for generated files. A
+  best-effort card surfaces positive/negative prompt, seed, model, and LoRAs;
+  the full embedded `workflow`/`prompt` JSON is available via Copy-as-JSON.
+  New read-only `GET /filemanaty/api/v1/metadata` endpoint. Format support:
+  PNG (`tEXt`/`iTXt`), WebP/JPEG (EXIF, including the UserComment sub-IFD), and
+  MP4/WebM (PyAV, optional — degrades gracefully when PyAV is absent). Extraction
+  never breaks the panel: unknown or custom graphs degrade each field to `—`.
+
 ## v0.4.1 — 2026-06-01
 
 ### Fixed
