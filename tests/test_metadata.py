@@ -137,3 +137,41 @@ def test_extract_jpeg_reads_workflow_from_usercomment_subifd(tmp_path):
     env = metadata.extract(p)
     assert env is not None
     assert env["workflow"] == {"nodes": [], "v": 0.4}
+
+
+class _FakeContainer:
+    def __init__(self, meta):
+        self.metadata = meta
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class _FakeAv:
+    def __init__(self, meta):
+        self._meta = meta
+
+    def open(self, _path):
+        return _FakeContainer(self._meta)
+
+
+def test_extract_video_reads_container_metadata(monkeypatch):
+    monkeypatch.setitem(sys.modules, "av",
+                        _FakeAv({"prompt": json.dumps(STD_PROMPT), "title": "ignore me"}))
+    env = metadata.extract(Path("/nonexistent/clip.webm"))
+    assert env is not None
+    assert env["prompt"] == STD_PROMPT
+    assert "title" not in env["other"] or env["other"].get("title") is None
+
+
+def test_extract_video_no_metadata_returns_none(monkeypatch):
+    monkeypatch.setitem(sys.modules, "av", _FakeAv({}))
+    assert metadata.extract(Path("/nonexistent/clip.mp4")) is None
+
+
+def test_extract_video_missing_pyav_returns_none(monkeypatch):
+    monkeypatch.setitem(sys.modules, "av", None)  # forces ImportError on `import av`
+    assert metadata.extract(Path("/nonexistent/clip.mp4")) is None

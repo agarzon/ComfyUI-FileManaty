@@ -160,6 +160,26 @@ def _extract_exif(path: Path) -> Optional[dict]:
     return _build_envelope(raw)
 
 
+def _extract_video(path: Path) -> Optional[dict]:
+    try:
+        import av  # lazy: ComfyUI-core dep, may be absent in some installs
+    except ImportError:
+        return None
+    try:
+        with av.open(str(path)) as container:
+            meta = dict(container.metadata or {})
+    except Exception as exc:  # noqa: BLE001 - unreadable container degrades to None
+        log.info("filemanaty: video metadata read failed for %s: %s", path.name, exc)
+        return None
+    raw: dict[str, str] = {}
+    for key, value in meta.items():
+        if key.lower() in ("workflow", "prompt") and isinstance(value, str):
+            raw[key.lower()] = value
+    if not raw:
+        return None
+    return _build_envelope(raw)
+
+
 def extract(path: Path) -> Optional[dict]:
     """Public entry: read embedded chunks from a media file -> envelope or None.
 
@@ -172,6 +192,8 @@ def extract(path: Path) -> Optional[dict]:
             return _extract_png(path)
         if suffix in (".webp", ".jpg", ".jpeg"):
             return _extract_exif(path)
+        if suffix in (".mp4", ".webm", ".mkv", ".mov"):
+            return _extract_video(path)
     except Exception as exc:  # noqa: BLE001 - extraction must never propagate
         log.info("filemanaty: metadata extraction failed for %s: %s", path.name, exc)
     return None
