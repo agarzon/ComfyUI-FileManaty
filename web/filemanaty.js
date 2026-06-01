@@ -18,6 +18,30 @@ export function escapeHtml(s) {
         .replace(/'/g, "&#39;");
 }
 
+// Maps ComfyUI's live PrimeVue theme tokens to our semantic --fm-* vars (with
+// dark fallbacks). Injected once on :root so dialogs/menus/toasts (which mount on
+// document.body, outside the overlay) inherit them too.
+function injectThemeTokens() {
+    if (document.getElementById("fm-theme-tokens")) return;
+    const style = document.createElement("style");
+    style.id = "fm-theme-tokens";
+    style.textContent = `:root{
+        --fm-bg: var(--p-content-background, #18181b);
+        --fm-bg-elevated: var(--p-overlay-popover-background, #1e1e1e);
+        --fm-bg-input: var(--p-form-field-background, #181818);
+        --fm-text: var(--p-text-color, #ddd);
+        --fm-text-muted: var(--p-text-muted-color, #888);
+        --fm-border: var(--p-content-border-color, #333);
+        --fm-hover: var(--p-content-hover-background, #2a2a2a);
+        --fm-accent: var(--p-primary-color, #0a84ff);
+        --fm-on-accent: var(--p-primary-contrast-color, #fff);
+        --fm-danger: #d9433f;
+        --fm-accent-soft: color-mix(in srgb, var(--fm-accent), transparent 80%);
+        --fm-scrim: rgba(0,0,0,.5);
+    }`;
+    document.head.appendChild(style);
+}
+
 export function childPathOf(name) {
     return STATE.currentPath ? `${STATE.currentPath}/${name}` : name;
 }
@@ -60,6 +84,7 @@ export const STATE = {
 };
 
 function openOverlay() {
+    injectThemeTokens();
     if (!STATE.overlay) {
         STATE.overlay = buildOverlay();
         document.body.appendChild(STATE.overlay);
