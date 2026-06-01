@@ -445,7 +445,7 @@ function renderGrid() {
         }
         const label = document.createElement("div");
         label.textContent = e.name;
-        label.style.cssText = "position:absolute;bottom:0;left:0;right:0;padding:2px 6px;background:rgba(0,0,0,.7);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        label.style.cssText = "position:absolute;bottom:0;left:0;right:0;padding:2px 6px;background:rgba(0,0,0,.7);color:#fff;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"; /* fixed light: sits on a dark scrim over the thumbnail */
         if (STATE.clipboard && STATE.clipboard.op === "cut"
             && STATE.clipboard.root === STATE.currentRoot
             && STATE.clipboard.paths.includes(childPath)) {

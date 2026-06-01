@@ -145,8 +145,11 @@ export function toast(message, kind = "info") {
         document.body.appendChild(toastHost);
     }
     const t = document.createElement("div");
-    const bg = kind === "error" ? "#d9433f" /* status color */ : kind === "success" ? "#2a8" /* status color */ : "var(--fm-accent)" /* status color: info */;
-    t.style.cssText = `background:${bg};color:var(--fm-on-accent);padding:8px 14px;border-radius:6px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.4);max-width:360px;`;
+    // success/error sit on fixed status-color bars (fixed white text); info is a
+    // neutral themed bar whose bg+text flip together with the theme.
+    const bg = kind === "error" ? "#d9433f" /* status color */ : kind === "success" ? "#2a8" /* status color */ : "var(--fm-bg-elevated)";
+    const fg = (kind === "error" || kind === "success") ? "#fff" : "var(--fm-text)";
+    t.style.cssText = `background:${bg};color:${fg};padding:8px 14px;border-radius:6px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.4);max-width:360px;`;
     t.textContent = message;
     toastHost.appendChild(t);
     setTimeout(() => t.remove(), 4000);
