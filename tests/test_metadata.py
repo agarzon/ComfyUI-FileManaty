@@ -175,3 +175,11 @@ def test_extract_video_no_metadata_returns_none(monkeypatch):
 def test_extract_video_missing_pyav_returns_none(monkeypatch):
     monkeypatch.setitem(sys.modules, "av", None)  # forces ImportError on `import av`
     assert metadata.extract(Path("/nonexistent/clip.mp4")) is None
+
+
+def test_extract_video_dispatch_covers_mkv_and_mov(monkeypatch):
+    # VideoHelperSuite emits .mkv/.mov alongside core's .mp4/.webm; all four route
+    # through the PyAV extractor.
+    monkeypatch.setitem(sys.modules, "av", _FakeAv({"prompt": json.dumps(STD_PROMPT)}))
+    for name in ("clip.mkv", "clip.mov"):
+        assert metadata.extract(Path("/nonexistent/" + name)) is not None

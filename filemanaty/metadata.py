@@ -192,7 +192,7 @@ def extract(path: Path) -> Optional[dict]:
             return _extract_png(path)
         if suffix in (".webp", ".jpg", ".jpeg"):
             return _extract_exif(path)
-        if suffix in (".mp4", ".webm"):
+        if suffix in (".mp4", ".webm", ".mkv", ".mov"):
             return _extract_video(path)
     except Exception as exc:  # noqa: BLE001 - extraction must never propagate
         log.info("filemanaty: metadata extraction failed for %s: %s", path.name, exc)
