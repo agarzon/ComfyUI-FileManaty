@@ -125,3 +125,15 @@ def test_extract_jpeg_without_metadata_returns_none(tmp_path):
     p = tmp_path / "plain.jpg"
     Image.new("RGB", (8, 8), "green").save(p, "JPEG")
     assert metadata.extract(p) is None
+
+
+def test_extract_jpeg_reads_workflow_from_usercomment_subifd(tmp_path):
+    p = tmp_path / "uc.jpg"
+    img = Image.new("RGB", (8, 8), "green")
+    exif = img.getexif()
+    # UserComment (0x9286) lives in the Exif sub-IFD (0x8769).
+    exif.get_ifd(0x8769)[0x9286] = "workflow:" + json.dumps({"nodes": [], "v": 0.4})
+    img.save(p, "JPEG", exif=exif)
+    env = metadata.extract(p)
+    assert env is not None
+    assert env["workflow"] == {"nodes": [], "v": 0.4}
