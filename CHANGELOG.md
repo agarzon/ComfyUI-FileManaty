@@ -8,6 +8,10 @@
   (light/dark/custom) via its palette tokens, instead of being hard-coded dark.
   Colors are driven by a set of semantic `--fm-*` variables aliasing ComfyUI's
   PrimeVue `--p-*` tokens, so the file manager recolors live when the theme changes.
+- Preview pane no longer jumps when navigating between images of different aspect
+  ratios. The preview image is now clamped to the pane height (`#fm-preview` gets
+  `min-height:0; overflow:hidden`), so the filename/actions block stays put instead
+  of being pushed off-screen by tall images.
 
 ## v0.3.2 — 2026-06-01
 

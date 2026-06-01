@@ -137,7 +137,7 @@ function buildOverlay() {
         <div id="fm-body" style="flex:1;display:grid;grid-template-columns:200px 1fr 34%;min-height:0;">
             <div id="fm-tree" style="overflow:auto;padding:8px;border-right:1px solid var(--fm-border);background:var(--fm-bg);font-size:13px;"></div>
             <div id="fm-grid" style="overflow:auto;padding:10px;display:grid;gap:8px;align-content:start;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));"></div>
-            <div id="fm-preview" style="border-left:1px solid var(--fm-border);padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--fm-bg);"></div>
+            <div id="fm-preview" style="border-left:1px solid var(--fm-border);padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--fm-bg);min-height:0;overflow:hidden;"></div>
         </div>
     `;
     const style = document.createElement("style");
