@@ -422,12 +422,16 @@ function renderGrid() {
     const thumbPx = { small: 100, medium: 140, large: 200 }[settings.get(SETTINGS_KEYS.THUMBNAIL_SIZE)] || 140;
     const densityGap = { compact: 4, normal: 8, comfortable: 14 }[settings.get(SETTINGS_KEYS.GRID_DENSITY)] || 8;
     grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${thumbPx}px, 1fr))`;
+    // Explicit row height. A grid item's aspect-ratio does NOT feed the auto-row
+    // track, so relying on it let tracks collapse to caption min-content (~30px)
+    // while cells rendered full-height — rows overlapped. Fixed track = no overlap.
+    grid.style.gridAutoRows = `${thumbPx}px`;
     grid.style.gap = `${densityGap}px`;
     grid.innerHTML = "";
     for (const e of sortedEntries()) {
         const cell = document.createElement("div");
         cell.dataset.name = e.name;
-        cell.style.cssText = "position:relative;aspect-ratio:1;background:var(--fm-bg);border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;";
+        cell.style.cssText = "position:relative;background:var(--fm-bg);border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;";
         const childPath = STATE.currentPath ? `${STATE.currentPath}/${e.name}` : e.name;
         if (e.kind === "image" && showThumbs) {
             const img = document.createElement("img");

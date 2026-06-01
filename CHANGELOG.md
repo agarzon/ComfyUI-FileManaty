@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Grid rows no longer overlap when a folder has many images. The cells' `aspect-ratio`
+  was not feeding the CSS grid's automatic row track, so rows collapsed toward the
+  caption's min-content height while cells rendered full size — stacking images over
+  the rows below. The grid now uses an explicit `grid-auto-rows` (the thumbnail size)
+  instead of `aspect-ratio`, so every row is the right height. This also fixes the
+  selection outline appearing to wrap more than the selected image (it was the
+  overlapping cell, not the image).
+
 ## v0.4.0 — 2026-06-01
 
 ### Fixed
