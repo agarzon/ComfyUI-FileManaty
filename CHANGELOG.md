@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.0 — 2026-06-02
+
+### Added
+
+- **Search & filter (current folder).** A toolbar **filter box** narrows the current
+  folder by name (case-insensitive substring) as you type, and a **type dropdown**
+  (All / Images / Videos / Audio / Folders / Other) filters by kind; the two combine.
+  A "X of Y" count shows how many entries match, an empty result shows a clear message,
+  and folders that hit the 5000-entry listing cap note that only the first 5000 are
+  covered. Entirely client-side over the already-loaded folder — no backend changes.
+  (Server-side and metadata-aware search remain on the roadmap.)
+
 ## v0.7.1 — 2026-06-02
 
 ### Packaging

@@ -98,6 +98,16 @@ export function rerender() {
     renderPreview();
 }
 
+// Reset the client-side filter to its empty state and sync the toolbar controls.
+// Called on navigation and overlay close so each folder opens unfiltered.
+function resetFilter() {
+    STATE.filter = { query: "", kind: "all" };
+    const si = document.getElementById("fm-search-input");
+    const tf = document.getElementById("fm-type-filter");
+    if (si) si.value = "";
+    if (tf) tf.value = "all";
+}
+
 export const STATE = {
     overlay: null,
     open: false,
@@ -108,6 +118,8 @@ export const STATE = {
     anchorName: null,      // last single-clicked name, for Shift-range
     clipboard: null,       // { op: "copy"|"cut", root, paths: [relPath...] }
     roots: [],
+    filter: { query: "", kind: "all" },  // client-side current-folder filter; kind ∈ all|image|video|audio|folder|other
+    truncated: false,                    // true when the current folder hit the /list 5000-entry cap
 };
 
 function openOverlay() {
@@ -127,6 +139,7 @@ function closeOverlay() {
         STATE.overlay.style.display = "none";
     }
     STATE.open = false;
+    resetFilter();
 }
 
 function buildOverlay() {
@@ -157,6 +170,17 @@ function buildOverlay() {
         <input id="fm-file-input" type="file" multiple style="display:none">
         <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
             <span id="fm-breadcrumb"></span>
+            <input id="fm-search-input" class="fm-search" type="text" placeholder="Filter…" autocomplete="off">
+            <button id="fm-search-clear" class="fm-tb" title="Clear filter" style="padding:4px 8px">✕</button>
+            <select id="fm-type-filter" class="fm-search">
+                <option value="all">All types</option>
+                <option value="image">Images</option>
+                <option value="video">Videos</option>
+                <option value="audio">Audio</option>
+                <option value="folder">Folders</option>
+                <option value="other">Other</option>
+            </select>
+            <span id="fm-filtercount" style="opacity:.7;margin-left:2px"></span>
             <span style="flex:1"></span>
             <span id="fm-selcount" style="opacity:.7;margin-right:6px"></span>
             <button class="fm-tb" data-act="newfolder">＋ New Folder</button>
@@ -179,6 +203,8 @@ function buildOverlay() {
     style.textContent = `#filemanaty-overlay .fm-tb{background:var(--fm-hover);border:0;color:inherit;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px}
 #filemanaty-overlay .fm-tb:hover{background:var(--fm-border)}
 #filemanaty-overlay .fm-tb.danger{color:var(--fm-danger)}
+#filemanaty-overlay .fm-search{background:var(--fm-bg-input);border:1px solid var(--fm-border);color:var(--fm-text);padding:3px 8px;border-radius:3px;font-size:12px}
+#filemanaty-overlay input.fm-search{width:160px}
 #filemanaty-overlay .fm-brand{display:flex;align-items:center;gap:10px}
 #filemanaty-overlay .fm-logo{display:inline-flex;width:26px;height:26px;flex:0 0 auto}
 #filemanaty-overlay .fm-logo svg{width:100%;height:100%;fill:var(--fm-accent)}
@@ -210,6 +236,16 @@ async function initOverlay() {
     loadVersion();
     document.addEventListener("keydown", (e) => {
         if (!STATE.open) return;
+        if (e.target && e.target.id === "fm-search-input") {
+            // Typing in the filter box: Esc clears the filter, everything else is the
+            // input's own business (don't run grid navigation / Ctrl+A / Backspace-up).
+            if (e.key === "Escape") {
+                resetFilter();
+                rerender();
+                e.preventDefault();
+            }
+            return;
+        }
         if (e.key === "Escape") {
             if (isDialogOpen()) return;              // a dialog handles its own Esc
             if (STATE.selected.size) {               // Esc clears selection before closing
@@ -272,6 +308,24 @@ async function initOverlay() {
         if (act) b.addEventListener("click", () => onToolbarAction(act));
     });
     document.getElementById("fm-refresh").addEventListener("click", () => refresh());
+
+    const searchInput = document.getElementById("fm-search-input");
+    const typeFilter = document.getElementById("fm-type-filter");
+    const applyFilter = () => {
+        STATE.filter.query = searchInput.value;
+        STATE.filter.kind = typeFilter.value;
+        // Drop any selection the filter now hides — can't act on unseen items.
+        const visible = new Set(sortedEntries().map((e) => e.name));
+        STATE.selected = new Set([...STATE.selected].filter((n) => visible.has(n)));
+        rerender();
+    };
+    searchInput.addEventListener("input", applyFilter);
+    typeFilter.addEventListener("change", applyFilter);
+    document.getElementById("fm-search-clear").addEventListener("click", () => {
+        resetFilter();
+        rerender();
+        searchInput.focus();
+    });
 
     const fileInput = document.getElementById("fm-file-input");
     fileInput.addEventListener("change", () => {
@@ -355,6 +409,7 @@ export async function navigateTo(rootId, relPath) {
     STATE.currentPath = relPath;
     STATE.selected.clear();
     STATE.anchorName = null;
+    resetFilter();
     try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {}
     highlightTab();
     updateWritableUI();
@@ -457,8 +512,9 @@ function highlightTab() {
 export async function refresh() {
     if (!STATE.currentRoot) return;
     const includeHidden = settings.get(SETTINGS_KEYS.ALLOW_HIDDEN);
-    const { entries, path } = await fetchList(STATE.currentRoot, STATE.currentPath, { includeHidden });
+    const { entries, path, truncated } = await fetchList(STATE.currentRoot, STATE.currentPath, { includeHidden });
     STATE.entries = entries;
+    STATE.truncated = !!truncated;
     // Drop any selected names that no longer exist after the refresh.
     STATE.selected = new Set([...STATE.selected].filter((n) => STATE.entries.some((e) => e.name === n)));
     renderBreadcrumb(path);
@@ -499,7 +555,8 @@ function renderGrid() {
     grid.style.gridAutoRows = `${thumbPx}px`;
     grid.style.gap = `${densityGap}px`;
     grid.innerHTML = "";
-    for (const e of sortedEntries()) {
+    const list = sortedEntries();
+    for (const e of list) {
         const cell = document.createElement("div");
         cell.dataset.name = e.name;
         cell.style.cssText = "position:relative;background:var(--fm-bg);border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;";
@@ -536,6 +593,21 @@ function renderGrid() {
         makeDraggable(cell, e.name);
         if (e.type === "dir") makeDropTarget(cell, STATE.currentRoot, childPath);
         grid.appendChild(cell);
+    }
+    if (list.length === 0 && STATE.entries.length > 0) {
+        const msg = document.createElement("div");
+        msg.textContent = "No items match your filter";
+        msg.style.cssText = "grid-column:1/-1;color:var(--fm-text-muted);font-size:13px;padding:8px;";
+        grid.appendChild(msg);
+    }
+    const fc = document.getElementById("fm-filtercount");
+    if (fc) {
+        const active = STATE.filter.query.trim() !== "" || STATE.filter.kind !== "all";
+        if (active) {
+            fc.textContent = `${list.length} of ${STATE.entries.length}` + (STATE.truncated ? " · first 5000" : "");
+        } else {
+            fc.textContent = STATE.truncated ? "first 5000 shown" : "";
+        }
     }
     const sc = document.getElementById("fm-selcount");
     if (sc) sc.textContent = STATE.selected.size ? `${STATE.selected.size} selected` : "";
@@ -759,6 +831,13 @@ export function sortedEntries() {
     const foldersFirst = settings.get(SETTINGS_KEYS.SORT_FOLDERS_FIRST);
     const dir = order === "desc" ? -1 : 1;
 
+    const q = STATE.filter.query.trim().toLowerCase();
+    const kind = STATE.filter.kind;
+    const filtered = STATE.entries.filter((e) =>
+        (q === "" || e.name.toLowerCase().includes(q)) &&
+        (kind === "all" || e.kind === kind)
+    );
+
     const cmpByField = (a, b) => {
         if (field === "size") return (a.size - b.size) * dir;
         if (field === "mtime") return (a.mtime - b.mtime) * dir;
@@ -766,7 +845,7 @@ export function sortedEntries() {
         return a.name.localeCompare(b.name) * dir;
     };
 
-    return [...STATE.entries].sort((a, b) => {
+    return filtered.sort((a, b) => {
         if (foldersFirst && a.type !== b.type) return a.type === "dir" ? -1 : 1;
         return cmpByField(a, b);
     });
