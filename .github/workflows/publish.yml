@@ -4,22 +4,64 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag whose changelog to (re)sync to the Registry, e.g. v0.8.0 (skips re-publish)"
+        required: true
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     env:
       COMFY_API_KEY: ${{ secrets.COMFY_API_KEY }}
+      PUBLISHER_ID: agarzon
+      NODE_ID: comfyui-filemanaty
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Tag push: the tag's tree. Manual run: the tag given as input.
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Publish to ComfyUI Registry
-        # Skips cleanly if the COMFY_API_KEY secret isn't configured yet.
-        if: env.COMFY_API_KEY != ''
+        # Only on tag push (a manual run is a changelog-only backfill of an
+        # already-published version). Skips cleanly if the secret isn't set yet.
+        if: github.event_name == 'push' && env.COMFY_API_KEY != ''
         run: |
           pip install comfy-cli
           comfy node publish --token "$COMFY_API_KEY"
+
+      - name: Sync version changelog to the Registry
+        # `comfy node publish` never sends a changelog, so the Registry shows none.
+        # Set it explicitly via the Registry API, reading the matching CHANGELOG.md
+        # section (same extraction as release.yml). Runs after publish on tag push,
+        # and standalone on a manual run to backfill an existing version.
+        if: env.COMFY_API_KEY != ''
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          v="${TAG#v}"
+          awk -v v="$v" '
+            $0 ~ "^## v?" v " " { f=1; next }
+            f && /^## / { exit }
+            f { print }
+          ' CHANGELOG.md > changelog.md
+          if [ ! -s changelog.md ]; then
+            echo "No CHANGELOG section found for $v" >&2
+            exit 1
+          fi
+          echo "--- changelog for $TAG ---"; cat changelog.md
+          # jq -Rs safely JSON-encodes the multi-line body (newlines, quotes).
+          body=$(jq -Rs '{changelog: ., deprecated: false}' < changelog.md)
+          code=$(curl -sS -o resp.json -w '%{http_code}' -X PUT \
+            "https://api.comfy.org/publishers/$PUBLISHER_ID/nodes/$NODE_ID/versions/$v" \
+            -H "Authorization: Bearer $COMFY_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$body")
+          echo "HTTP $code"; cat resp.json; echo
+          case "$code" in
+            2*) echo "Changelog synced for $v" ;;
+            *) echo "Failed to sync changelog (HTTP $code)" >&2; exit 1 ;;
+          esac
