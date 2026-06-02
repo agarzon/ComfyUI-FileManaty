@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.7.1 — 2026-06-02
+
+### Packaging
+
+- Added a square **Icon** (400×400) and a 21:9 **Banner** to the ComfyUI Registry
+  listing (`[tool.comfy]` `Icon` / `Banner`).
+- License now publishes as a clean SPDX `MIT` (was rendering as `{"text": "MIT"}`):
+  switched `[project].license` to the SPDX string form and dropped the redundant
+  MIT trove classifier (requires `setuptools>=77`).
+- Removed the unused `assets/filemanaty-banner.jpg` (superseded by the screenshot hero).
+
 ## v0.7.0 — 2026-06-02
 
 ### Added
