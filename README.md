@@ -50,7 +50,7 @@ Restart ComfyUI.
 
 1. Open ComfyUI in your browser.
 2. Click the **🦭 FileManaty** button in the top action bar — or press **`Ctrl+Shift+F`**.
-3. With no config file present, FileManaty auto-mounts ComfyUI's **`output/`** and **`input/`** folders as your two browsable roots. Start browsing!
+3. With no config file present, FileManaty auto-mounts ComfyUI's **`output/`**, **`input/`**, and **`workflows`** folders as your browsable roots. Start browsing!
 
 Pick a file to preview it on the right; double-click a folder to enter it. Select one or many files (click / `Ctrl`-click / `Shift`-click / `Ctrl+A`), then use the toolbar or right-click menu to manage them.
 
@@ -107,11 +107,10 @@ FileManaty can write to your filesystem, so please read this.
 
 ## 🗺️ Roadmap
 
-Shipped recently: in-folder name + type filter, rich video + audio preview, embedded-metadata cards, Load-on-canvas, and a native theme-following UI. Coming next:
+Shipped recently: auto-mounted Workflows root, in-folder name + type filter, rich video + audio preview, embedded-metadata cards, Load-on-canvas, and a native theme-following UI. Coming next:
 
 - 🔍 **Server-side & metadata search** — search across a whole root (past the listing cap) and find files by the **prompt / model / seed** that made them. *(In-folder name + type filtering shipped in v0.8.0.)*
 - 🔐 **Optional built-in authentication** — a lightweight password mode for small deployments.
-- 🗂️ **Auto-mount your workflows folder** as a browsable root.
 - 🖱️ **Right-click menu on the folder tree** (new folder, rename, delete, paste).
 - 👁️ **Double-click to open** — full-size image lightbox, inline video/audio player, doc editor, or 3D viewer.
 - 📝 **Text / JSON preview** with syntax highlighting — later, inline editing + save.
