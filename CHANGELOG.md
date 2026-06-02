@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.1 — 2026-06-02
+
+### Changed
+
+- The settings group is now branded as "🦭 FileManaty" in ComfyUI's settings panel.
+  Setting IDs are unchanged, so saved preferences are preserved.
+
 ## v0.6.0 — 2026-06-02
 
 ### Added

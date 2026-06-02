@@ -56,7 +56,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.ALLOW_HIDDEN,
             name: "Show hidden files",
-            category: ["FileManaty", "View", "Allow hidden"],
+            category: ["🦭 FileManaty", "View", "Allow hidden"],
             type: "boolean",
             defaultValue: DEFAULTS[KEYS.ALLOW_HIDDEN],
             tooltip: "Show dotfiles in the file listing. Preview/download of dotfiles is still blocked; toggle is listing-only in v0.3.",
@@ -65,7 +65,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.SHOW_THUMBNAILS,
             name: "Show thumbnails",
-            category: ["FileManaty", "View", "Show thumbnails"],
+            category: ["🦭 FileManaty", "View", "Show thumbnails"],
             type: "boolean",
             defaultValue: DEFAULTS[KEYS.SHOW_THUMBNAILS],
             onChange: (newV, oldV) => dispatch(KEYS.SHOW_THUMBNAILS, newV, oldV),
@@ -73,7 +73,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.GRID_DENSITY,
             name: "Grid density",
-            category: ["FileManaty", "View", "Grid density"],
+            category: ["🦭 FileManaty", "View", "Grid density"],
             type: "combo",
             defaultValue: DEFAULTS[KEYS.GRID_DENSITY],
             options: ["compact", "normal", "comfortable"],
@@ -82,7 +82,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.THUMBNAIL_SIZE,
             name: "Thumbnail size",
-            category: ["FileManaty", "View", "Thumbnail size"],
+            category: ["🦭 FileManaty", "View", "Thumbnail size"],
             type: "combo",
             defaultValue: DEFAULTS[KEYS.THUMBNAIL_SIZE],
             options: ["small", "medium", "large"],
@@ -91,7 +91,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.SORT_FIELD,
             name: "Default sort field",
-            category: ["FileManaty", "Sort", "Field"],
+            category: ["🦭 FileManaty", "Sort", "Field"],
             type: "combo",
             defaultValue: DEFAULTS[KEYS.SORT_FIELD],
             options: ["name", "size", "mtime", "type"],
@@ -100,7 +100,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.SORT_ORDER,
             name: "Default sort order",
-            category: ["FileManaty", "Sort", "Order"],
+            category: ["🦭 FileManaty", "Sort", "Order"],
             type: "combo",
             defaultValue: DEFAULTS[KEYS.SORT_ORDER],
             options: ["asc", "desc"],
@@ -109,7 +109,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.SORT_FOLDERS_FIRST,
             name: "Folders first",
-            category: ["FileManaty", "Sort", "Folders first"],
+            category: ["🦭 FileManaty", "Sort", "Folders first"],
             type: "boolean",
             defaultValue: DEFAULTS[KEYS.SORT_FOLDERS_FIRST],
             onChange: (newV, oldV) => dispatch(KEYS.SORT_FOLDERS_FIRST, newV, oldV),
@@ -117,7 +117,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.DEFAULT_ROOT,
             name: "Default root on open",
-            category: ["FileManaty", "Open", "Default root"],
+            category: ["🦭 FileManaty", "Open", "Default root"],
             type: "combo",
             defaultValue: DEFAULTS[KEYS.DEFAULT_ROOT],
             options: rootOptions,
@@ -126,7 +126,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.CONFIRM_ON_DELETE,
             name: "Confirm before move-to-trash",
-            category: ["FileManaty", "Confirm", "On delete"],
+            category: ["🦭 FileManaty", "Confirm", "On delete"],
             type: "boolean",
             defaultValue: DEFAULTS[KEYS.CONFIRM_ON_DELETE],
             onChange: (newV, oldV) => dispatch(KEYS.CONFIRM_ON_DELETE, newV, oldV),
@@ -134,7 +134,7 @@ export function buildSettingsDefinitions(rootIds) {
         {
             id: KEYS.CONFIRM_ON_SHIFT_DELETE,
             name: "Confirm before permanent delete",
-            category: ["FileManaty", "Confirm", "On shift-delete"],
+            category: ["🦭 FileManaty", "Confirm", "On shift-delete"],
             type: "boolean",
             defaultValue: DEFAULTS[KEYS.CONFIRM_ON_SHIFT_DELETE],
             onChange: (newV, oldV) => dispatch(KEYS.CONFIRM_ON_SHIFT_DELETE, newV, oldV),
