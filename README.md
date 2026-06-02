@@ -90,6 +90,12 @@ For security and capacity limits the server is the authority. Drop a `config.jso
 
 If the config is malformed or invalid, FileManaty logs a clear error and falls back to the auto-mount defaults — **ComfyUI never crashes**.
 
+By default, FileManaty also auto-mounts your ComfyUI **Workflows** folder
+(`<user-directory>/default/workflows`) as a **writable** root, so you can browse, preview, and
+manage your saved workflow `.json` files (and open them with *Load on canvas*). The folder is
+created if it doesn't exist yet. A custom `config.json` replaces these auto-mount defaults, so if
+you use one, add a workflows root explicitly by its path.
+
 ## 🔒 Security
 
 FileManaty can write to your filesystem, so please read this.

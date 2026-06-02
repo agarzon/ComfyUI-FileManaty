@@ -309,3 +309,75 @@ def test_legacy_thumbnails_enabled_in_config_silently_ignored(tmp_path: Path):
     cfg = load_config(cfg_path, default_output_dir=tmp_path, default_input_dir=tmp_path)
     assert len(cfg.roots) == 1
     assert not hasattr(cfg.thumbnails, "enabled")
+
+
+def test_default_config_mounts_workflows_when_dir_provided(tmp_path):
+    """A provided workflows dir is mounted as a writable 'workflows' root."""
+    outputs = tmp_path / "outputs"; outputs.mkdir()
+    inputs = tmp_path / "inputs"; inputs.mkdir()
+    workflows = tmp_path / "user" / "default" / "workflows"; workflows.mkdir(parents=True)
+
+    cfg = load_config(
+        config_path=tmp_path / "nope.json",
+        default_output_dir=outputs,
+        default_input_dir=inputs,
+        default_workflows_dir=workflows,
+    )
+
+    assert [r.id for r in cfg.roots] == ["outputs", "inputs", "workflows"]
+    wf = cfg.roots[2]
+    assert wf.label == "Workflows"
+    assert wf.writable is True
+    assert wf.path == workflows.resolve()
+
+
+def test_default_config_creates_missing_workflows_dir(tmp_path):
+    """A missing workflows dir is created (lazy) and then mounted."""
+    outputs = tmp_path / "outputs"; outputs.mkdir()
+    inputs = tmp_path / "inputs"; inputs.mkdir()
+    workflows = tmp_path / "user" / "default" / "workflows"  # does NOT exist yet
+
+    cfg = load_config(
+        config_path=tmp_path / "nope.json",
+        default_output_dir=outputs,
+        default_input_dir=inputs,
+        default_workflows_dir=workflows,
+    )
+
+    assert workflows.is_dir()
+    assert [r.id for r in cfg.roots] == ["outputs", "inputs", "workflows"]
+
+
+def test_default_config_without_workflows_dir_is_unchanged(tmp_path):
+    """Omitting the workflows dir keeps the original two-root default (back-compat)."""
+    outputs = tmp_path / "outputs"; outputs.mkdir()
+    inputs = tmp_path / "inputs"; inputs.mkdir()
+
+    cfg = load_config(
+        config_path=tmp_path / "nope.json",
+        default_output_dir=outputs,
+        default_input_dir=inputs,
+    )
+
+    assert [r.id for r in cfg.roots] == ["outputs", "inputs"]
+
+
+def test_default_config_skips_workflows_when_dir_uncreatable(tmp_path, caplog):
+    """If the workflows dir can't be created, skip just that root; outputs/inputs still mount."""
+    outputs = tmp_path / "outputs"; outputs.mkdir()
+    inputs = tmp_path / "inputs"; inputs.mkdir()
+    # Make the parent a FILE so mkdir(parents=True) raises NotADirectoryError (an OSError).
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a dir")
+    workflows = blocker / "workflows"
+
+    with caplog.at_level("WARNING"):
+        cfg = load_config(
+            config_path=tmp_path / "nope.json",
+            default_output_dir=outputs,
+            default_input_dir=inputs,
+            default_workflows_dir=workflows,
+        )
+
+    assert [r.id for r in cfg.roots] == ["outputs", "inputs"]
+    assert "could not mount" in caplog.text.lower()

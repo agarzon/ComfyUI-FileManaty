@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.9.0 — 2026-06-02
+
+### Added
+
+- **Workflows root (auto-mounted).** FileManaty now mounts your ComfyUI **Workflows** folder
+  (`<user-directory>/default/workflows`) as a third **writable** root next to Outputs and Inputs,
+  out of the box — browse, preview, manage, and *Load on canvas* your saved workflow `.json` files.
+  The folder is created if missing, and the root is skipped gracefully if it can't be resolved.
+  Path resolution goes through ComfyUI's `folder_paths` (correct on Windows/macOS/Linux, honors
+  `--user-directory`). Single-user (`default`) only for now; per-user mounting awaits auth.
+
 ## v0.8.0 — 2026-06-02
 
 ### Added

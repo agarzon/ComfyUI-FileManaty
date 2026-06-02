@@ -867,11 +867,19 @@ def _attach_to_promptserver() -> None:
 
     package_dir = Path(__file__).resolve().parent.parent
     config_path = package_dir / "config.json"
+    # ComfyUI's single-user workflows dir; resolved via folder_paths so it's correct on
+    # Windows/macOS/Linux and honors --user-directory. Guarded: never crash ComfyUI.
+    try:
+        workflows_dir = Path(folder_paths.get_user_directory()) / "default" / "workflows"
+    except Exception:  # pragma: no cover - depends on ComfyUI runtime
+        workflows_dir = None
+
     global _config
     _config = load_config(
         config_path=config_path,
         default_output_dir=Path(folder_paths.get_output_directory()),
         default_input_dir=Path(folder_paths.get_input_directory()),
+        default_workflows_dir=workflows_dir,
     )
 
     log.info("filemanaty: loaded config from %s", config_path if config_path.exists() else "(defaults)")
