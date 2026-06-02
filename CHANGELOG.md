@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.7.0 — 2026-06-02
+
+### Added
+
+- The preview pane now shows the media **resolution** (e.g. `1024 × 1024 · 1234 KB · modified …`)
+  for images and video, alongside the existing file size and modified date. Frontend-only:
+  the dimensions are read from the already-loaded preview element (`naturalWidth`/`videoWidth`),
+  so there is no extra backend work or request. Audio is unchanged (no resolution).
+
+### Changed
+
+- The top action-bar launcher icon now **brightens to the brand-accent color on hover**
+  (with a short transition), instead of staying muted gray. The highlight follows ComfyUI's
+  theme via `--p-primary-color`.
+
+### Docs
+
+- Added an `MIT LICENSE` file.
+- README rewritten for end users — new screenshot hero, feature highlights, install,
+  configuration (split into ComfyUI Settings vs `config.json`), security, and a public
+  roadmap. The config table now matches the actual server schema, and a Wallrus sponsor
+  section was added.
+- `config.example.json` updated to the current schema: dropped the removed
+  `files.allow_hidden` / `thumbnails.enabled` keys; added `files.video_extensions`
+  and `files.audio_extensions`.
+
+### Packaging
+
+- Prepared **ComfyUI Registry** publishing: `[tool.comfy]` metadata in `pyproject.toml`
+  (with `[tool.comfy.version].path` so the dynamic `__version__` is picked up) and a
+  `publish.yml` workflow that runs `comfy node publish` on a `v*` tag.
+
 ## v0.6.1 — 2026-06-02
 
 ### Changed

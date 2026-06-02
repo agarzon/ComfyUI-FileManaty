@@ -30,6 +30,16 @@ test = [
 [project.urls]
 Repository = "https://github.com/agarzon/ComfyUI-FileManaty"
 
+# ComfyUI Registry metadata (used by `comfy node publish`).
+[tool.comfy]
+PublisherId = "agarzon"       # https://registry.comfy.org/publishers/agarzon
+DisplayName = "FileManaty"
+Icon = ""                     # optional: URL to a square icon image
+
+[tool.comfy.version]
+# version is dynamic (filemanaty.__version__); comfy-cli reads it from this source file
+path = "filemanaty/__init__.py"
+
 [tool.setuptools.dynamic]
 version = { attr = "filemanaty.__version__" }
 

@@ -1,4 +1,4 @@
-"""ComfyUI-FileManaty: read-only file viewer extension.
+"""ComfyUI-FileManaty: in-browser file manager extension.
 
 ComfyUI imports this package during custom_nodes discovery. Importing
 filemanaty.api as a side effect attaches HTTP routes to

@@ -62,8 +62,10 @@ function injectBrandStyles() {
     const style = document.createElement("style");
     style.id = "fm-brand-styles";
     style.textContent = `.fm-icon-manatee{display:inline-block;width:1.15rem;height:1.15rem;`
-        + `background-color:currentColor;-webkit-mask:url("${uri}") center/contain no-repeat;`
-        + `mask:url("${uri}") center/contain no-repeat}`;
+        + `background-color:currentColor;transition:background-color .15s;`
+        + `-webkit-mask:url("${uri}") center/contain no-repeat;`
+        + `mask:url("${uri}") center/contain no-repeat}`
+        + `button:hover>.fm-icon-manatee{background-color:var(--p-primary-color,currentColor)}`;
     document.head.appendChild(style);
 }
 
@@ -674,11 +676,11 @@ function renderPreview() {
     if (sel.kind === "image") {
         el.innerHTML = `
             <div style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--fm-bg);border-radius:4px;min-height:0;">
-                <img src="${previewURL(STATE.currentRoot, childPath)}" style="max-width:100%;max-height:100%;object-fit:contain;">
+                <img id="fm-media" src="${previewURL(STATE.currentRoot, childPath)}" style="max-width:100%;max-height:100%;object-fit:contain;">
             </div>
             <div style="font-size:12px;line-height:1.6;">
                 <div><strong>${escapeHtml(sel.name)}</strong></div>
-                <div style="color:var(--fm-text-muted)">${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
+                <div style="color:var(--fm-text-muted)"><span id="fm-dims"></span>${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
             </div>
             <div style="display:flex;gap:6px;">
                 <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:var(--fm-accent);color:var(--fm-on-accent);padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
@@ -689,11 +691,11 @@ function renderPreview() {
     } else if (sel.kind === "video") {
         el.innerHTML = `
             <div style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--fm-bg);border-radius:4px;min-height:0;">
-                <video controls preload="metadata" src="${previewURL(STATE.currentRoot, childPath)}" style="max-width:100%;max-height:100%;"></video>
+                <video id="fm-media" controls preload="metadata" src="${previewURL(STATE.currentRoot, childPath)}" style="max-width:100%;max-height:100%;"></video>
             </div>
             <div style="font-size:12px;line-height:1.6;">
                 <div><strong>${escapeHtml(sel.name)}</strong></div>
-                <div style="color:var(--fm-text-muted)">${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
+                <div style="color:var(--fm-text-muted)"><span id="fm-dims"></span>${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
             </div>
             <div style="display:flex;gap:6px;">
                 <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:var(--fm-accent);color:var(--fm-on-accent);padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
@@ -728,6 +730,26 @@ function renderPreview() {
                 <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:var(--fm-accent);color:var(--fm-on-accent);padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
             </div>
         `;
+    }
+    wireDimensions();
+}
+
+// Fill the "W × H · " resolution slot from the preview <img>/<video> once it
+// has loaded its intrinsic size. Frontend-only: the media is already fetched
+// for the preview, so reading naturalWidth/videoWidth costs nothing. A render
+// for a new selection replaces #fm-media and #fm-dims, so a late load event
+// from a previous element writes into a detached span — harmless.
+function wireDimensions() {
+    const span = document.getElementById("fm-dims");
+    const media = document.getElementById("fm-media");
+    if (!span || !media) return;
+    const fill = (w, h) => { if (w && h) span.textContent = `${w} × ${h} · `; };
+    if (media.tagName === "IMG") {
+        if (media.complete) fill(media.naturalWidth, media.naturalHeight);
+        else media.addEventListener("load", () => fill(media.naturalWidth, media.naturalHeight), { once: true });
+    } else {
+        if (media.videoWidth) fill(media.videoWidth, media.videoHeight);
+        else media.addEventListener("loadedmetadata", () => fill(media.videoWidth, media.videoHeight), { once: true });
     }
 }
 

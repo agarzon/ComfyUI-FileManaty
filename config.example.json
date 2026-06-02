@@ -13,11 +13,11 @@
     }
   ],
   "files": {
-    "allow_hidden": false,
-    "image_extensions": [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif"]
+    "image_extensions": [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif"],
+    "video_extensions": [".mp4", ".webm"],
+    "audio_extensions": [".mp3", ".wav", ".ogg", ".m4a", ".flac"]
   },
   "thumbnails": {
-    "enabled": true,
     "max_dimension": 320
   },
   "write": {
