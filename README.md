@@ -101,13 +101,14 @@ FileManaty can write to your filesystem, so please read this.
 
 ## 🗺️ Roadmap
 
-Shipped recently: rich video + audio preview, embedded-metadata cards, Load-on-canvas, and a native theme-following UI. Coming next:
+Shipped recently: in-folder name + type filter, rich video + audio preview, embedded-metadata cards, Load-on-canvas, and a native theme-following UI. Coming next:
 
-- 🔍 **Search & filter** — find files by name and type, then by the **prompt / model / seed** that made them.
+- 🔍 **Server-side & metadata search** — search across a whole root (past the listing cap) and find files by the **prompt / model / seed** that made them. *(In-folder name + type filtering shipped in v0.8.0.)*
 - 🔐 **Optional built-in authentication** — a lightweight password mode for small deployments.
 - 🗂️ **Auto-mount your workflows folder** as a browsable root.
 - 🖱️ **Right-click menu on the folder tree** (new folder, rename, delete, paste).
-- 📝 **Text / JSON preview** with syntax highlighting.
+- 👁️ **Double-click to open** — full-size image lightbox, inline video/audio player, doc editor, or 3D viewer.
+- 📝 **Text / JSON preview** with syntax highlighting — later, inline editing + save.
 - 🧊 **3D model preview** (Load3D).
 - 📤 **Send to input** — move an output into `input/` in one click.
 
