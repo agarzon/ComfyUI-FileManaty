@@ -17,12 +17,12 @@ jobs:
       PUBLISHER_ID: agarzon
       NODE_ID: comfyui-filemanaty
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Tag push: the tag's tree. Manual run: the tag given as input.
           ref: ${{ github.event.inputs.tag || github.ref_name }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
