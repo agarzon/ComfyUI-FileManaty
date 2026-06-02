@@ -517,9 +517,8 @@ function metaCardHtml(data) {
     const btnStyle = "background:var(--fm-bg-elevated);color:var(--fm-text);border:1px solid var(--fm-border);padding:4px 10px;border-radius:3px;font-size:12px;cursor:pointer;";
     if (data.raw.workflow != null || data.raw.prompt != null) {
         btns.push(`<button data-action="load" style="${btnStyle}">Load on canvas</button>`);
+        btns.push(`<button data-copy="json" style="${btnStyle}">Copy JSON</button>`);
     }
-    if (data.raw.workflow != null) btns.push(`<button data-copy="workflow" style="${btnStyle}">Copy workflow JSON</button>`);
-    if (data.raw.prompt != null) btns.push(`<button data-copy="prompt" style="${btnStyle}">Copy prompt JSON</button>`);
     return `
         <div style="border-top:1px solid var(--fm-border);margin-top:8px;padding-top:8px;font-size:12px;line-height:1.6;display:flex;flex-direction:column;gap:2px;">
             ${metaField("Positive", f.positive)}
@@ -576,8 +575,9 @@ async function loadMetadata(root, path) {
     paintMeta(token, metaCardHtml(data));
     const el = document.getElementById("fm-meta");
     if (!el || token !== metaToken) return;
-    el.querySelector("[data-copy=workflow]")?.addEventListener("click", () => copyJSON(data.raw.workflow));
-    el.querySelector("[data-copy=prompt]")?.addEventListener("click", () => copyJSON(data.raw.prompt));
+    // Prefer the full UI workflow (round-trips to canvas); fall back to the API
+    // prompt for files that embed only that.
+    el.querySelector("[data-copy=json]")?.addEventListener("click", () => copyJSON(data.raw.workflow ?? data.raw.prompt));
     el.querySelector("[data-action=load]")?.addEventListener("click", () => loadWorkflowOnCanvas(root, path));
 }
 

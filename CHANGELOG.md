@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.7 — 2026-06-01
+
+### Changed
+
+- The metadata card's two copy buttons ("Copy workflow JSON" / "Copy prompt JSON")
+  are now a single **Copy JSON** button. It copies the full UI workflow when present
+  (the editable, shareable graph) and falls back to the API prompt for files that
+  embed only that — removing redundant, near-identical buttons while keeping coverage.
+
 ## v0.5.6 — 2026-06-01
 
 ### Fixed
