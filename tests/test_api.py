@@ -948,7 +948,8 @@ async def test_upload_invalid_on_conflict_returns_400(client_factory):
 async def test_upload_skip_existing(client_factory):
     client = await client_factory()
     form = FormData()
-    form.add_field("root", "t"); form.add_field("path", "")
+    form.add_field("root", "t")
+    form.add_field("path", "")
     form.add_field("file", b"x", filename="top.txt", content_type="application/octet-stream")
     resp = await client.post("/filemanaty/api/v1/upload?on_conflict=skip", data=form)
     assert resp.status == 200
@@ -959,7 +960,8 @@ async def test_upload_replace_directory_rejected(client_factory):
     # uploading a FILE named "sub" with replace must NOT rmtree the existing sub/ directory
     client = await client_factory()
     form = FormData()
-    form.add_field("root", "t"); form.add_field("path", "")
+    form.add_field("root", "t")
+    form.add_field("path", "")
     form.add_field("file", b"x", filename="sub", content_type="application/octet-stream")
     resp = await client.post("/filemanaty/api/v1/upload?on_conflict=replace", data=form)
     assert resp.status == 400
@@ -1018,7 +1020,8 @@ async def test_upload_into_trash_rejected(client_factory):
     client = await client_factory()
     await _post(client, "/filemanaty/api/v1/delete", {"root": "t", "items": ["sub"]})
     form = FormData()
-    form.add_field("root", "t"); form.add_field("path", ".filemanaty_trash")
+    form.add_field("root", "t")
+    form.add_field("path", ".filemanaty_trash")
     form.add_field("file", b"x", filename="evil.txt", content_type="application/octet-stream")
     resp = await client.post("/filemanaty/api/v1/upload", data=form)
     assert resp.status == 403
@@ -1079,7 +1082,8 @@ async def test_ro_delete_rejected(ro_rw_client):
 async def test_ro_upload_rejected(ro_rw_client):
     client = await ro_rw_client()
     form = FormData()
-    form.add_field("root", "ro"); form.add_field("path", "")
+    form.add_field("root", "ro")
+    form.add_field("path", "")
     form.add_field("file", b"x", filename="new.txt", content_type="application/octet-stream")
     resp = await client.post("/filemanaty/api/v1/upload", data=form)
     assert resp.status == 403

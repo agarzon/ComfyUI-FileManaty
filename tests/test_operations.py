@@ -102,41 +102,58 @@ def test_rename_file(tmp_path):
 
 
 def test_copy_one_file(tmp_path):
-    src = tmp_path / "a.txt"; src.write_text("data")
-    dst = tmp_path / "dst"; dst.mkdir()
+    src = tmp_path / "a.txt"
+    src.write_text("data")
+    dst = tmp_path / "dst"
+    dst.mkdir()
     ops.copy_one(src, dst / "a.txt", replace=False)
     assert (dst / "a.txt").read_text() == "data"
     assert src.exists()  # copy leaves source
 
 
 def test_copy_one_dir(tmp_path):
-    src = tmp_path / "d"; src.mkdir(); (src / "f.txt").write_text("x")
-    dst = tmp_path / "dst"; dst.mkdir()
+    src = tmp_path / "d"
+    src.mkdir()
+    (src / "f.txt").write_text("x")
+    dst = tmp_path / "dst"
+    dst.mkdir()
     ops.copy_one(src, dst / "d", replace=False)
     assert (dst / "d" / "f.txt").read_text() == "x"
 
 
 def test_copy_one_replace_dir(tmp_path):
-    src = tmp_path / "s"; src.mkdir(); (src / "new.txt").write_text("new")
-    dst = tmp_path / "d"; dst.mkdir()
-    target = dst / "s"; target.mkdir(); (target / "old.txt").write_text("old")
+    src = tmp_path / "s"
+    src.mkdir()
+    (src / "new.txt").write_text("new")
+    dst = tmp_path / "d"
+    dst.mkdir()
+    target = dst / "s"
+    target.mkdir()
+    (target / "old.txt").write_text("old")
     ops.copy_one(src, target, replace=True)
     assert (target / "new.txt").read_text() == "new"
     assert not (target / "old.txt").exists()  # replaced wholesale, not merged
 
 
 def test_move_one_file(tmp_path):
-    src = tmp_path / "a.txt"; src.write_text("data")
-    dst = tmp_path / "dst"; dst.mkdir()
+    src = tmp_path / "a.txt"
+    src.write_text("data")
+    dst = tmp_path / "dst"
+    dst.mkdir()
     ops.move_one(src, dst / "a.txt", replace=False)
     assert (dst / "a.txt").read_text() == "data"
     assert not src.exists()  # move removes source
 
 
 def test_move_one_replace_dir(tmp_path):
-    src = tmp_path / "s"; src.mkdir(); (src / "new.txt").write_text("new")
-    dst = tmp_path / "d"; dst.mkdir()
-    target = dst / "s"; target.mkdir(); (target / "old.txt").write_text("old")
+    src = tmp_path / "s"
+    src.mkdir()
+    (src / "new.txt").write_text("new")
+    dst = tmp_path / "d"
+    dst.mkdir()
+    target = dst / "s"
+    target.mkdir()
+    (target / "old.txt").write_text("old")
     ops.move_one(src, target, replace=True)
     assert (target / "new.txt").read_text() == "new"
     assert not (target / "old.txt").exists()  # replaced wholesale
@@ -144,23 +161,28 @@ def test_move_one_replace_dir(tmp_path):
 
 
 def test_copy_one_replace_file(tmp_path):
-    src = tmp_path / "a.txt"; src.write_text("new")
-    target = tmp_path / "b.txt"; target.write_text("old")
+    src = tmp_path / "a.txt"
+    src.write_text("new")
+    target = tmp_path / "b.txt"
+    target.write_text("old")
     ops.copy_one(src, target, replace=True)
     assert target.read_text() == "new"
     assert src.exists()  # copy keeps source
 
 
 def test_move_one_replace_file(tmp_path):
-    src = tmp_path / "a.txt"; src.write_text("new")
-    target = tmp_path / "b.txt"; target.write_text("old")
+    src = tmp_path / "a.txt"
+    src.write_text("new")
+    target = tmp_path / "b.txt"
+    target.write_text("old")
     ops.move_one(src, target, replace=True)
     assert target.read_text() == "new"
     assert not src.exists()  # move removes source
 
 
 def test_move_to_trash_round_trip(tmp_path):
-    item = tmp_path / "doomed.txt"; item.write_text("bye")
+    item = tmp_path / "doomed.txt"
+    item.write_text("bye")
     tid = ops.move_to_trash(tmp_path, item)
     assert not item.exists()
     trash = tmp_path / ops.TRASH_DIRNAME
@@ -176,7 +198,8 @@ def test_list_trash_empty(tmp_path):
 
 
 def test_list_trash_after_delete(tmp_path):
-    item = tmp_path / "a.txt"; item.write_text("x")
+    item = tmp_path / "a.txt"
+    item.write_text("x")
     ops.move_to_trash(tmp_path, item)
     entries = ops.list_trash(tmp_path)
     assert len(entries) == 1
@@ -184,7 +207,8 @@ def test_list_trash_after_delete(tmp_path):
 
 
 def test_list_trash_tolerates_missing_meta(tmp_path):
-    item = tmp_path / "a.txt"; item.write_text("x")
+    item = tmp_path / "a.txt"
+    item.write_text("x")
     tid = ops.move_to_trash(tmp_path, item)
     # simulate the best-effort meta write having failed
     (tmp_path / ops.TRASH_DIRNAME / f"{tid}.meta.json").unlink()
@@ -195,14 +219,16 @@ def test_list_trash_tolerates_missing_meta(tmp_path):
 
 
 def test_list_trash_skips_empty_id_dir(tmp_path):
-    trash = tmp_path / ops.TRASH_DIRNAME; trash.mkdir()
+    trash = tmp_path / ops.TRASH_DIRNAME
+    trash.mkdir()
     (trash / "20260101-000000-deadbeef").mkdir()  # empty orphan id dir
     assert ops.list_trash(tmp_path) == []
 
 
 def test_restore_round_trip(tmp_path):
     (tmp_path / "sub").mkdir()
-    item = tmp_path / "sub" / "a.txt"; item.write_text("x")
+    item = tmp_path / "sub" / "a.txt"
+    item.write_text("x")
     tid = ops.move_to_trash(tmp_path, item)
     assert not item.exists()
     ops.restore_from_trash(tmp_path, tid, item, replace=False)
@@ -211,7 +237,8 @@ def test_restore_round_trip(tmp_path):
 
 
 def test_purge_one(tmp_path):
-    item = tmp_path / "a.txt"; item.write_text("x")
+    item = tmp_path / "a.txt"
+    item.write_text("x")
     tid = ops.move_to_trash(tmp_path, item)
     ops.purge(tmp_path, tid)
     assert ops.list_trash(tmp_path) == []

@@ -139,7 +139,8 @@ def test_default_config_roots_are_writable(tmp_path):
 
 
 def test_malformed_json_falls_back_to_defaults(tmp_path, caplog):
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text("this is not json")
 
@@ -151,7 +152,8 @@ def test_malformed_json_falls_back_to_defaults(tmp_path, caplog):
 
 
 def test_structural_error_falls_back_to_defaults(tmp_path, caplog):
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text('{"roots": "not a list"}')
 
@@ -164,7 +166,8 @@ def test_structural_error_falls_back_to_defaults(tmp_path, caplog):
 
 def test_non_dict_files_falls_back(tmp_path, caplog):
     """Regression: a non-dict 'files' value used to crash with AttributeError."""
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text('{"files": 42}')
 
@@ -176,7 +179,8 @@ def test_non_dict_files_falls_back(tmp_path, caplog):
 
 def test_non_int_max_dimension_falls_back(tmp_path, caplog):
     """Regression: max_dimension='big' used to crash with ValueError."""
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text('{"thumbnails": {"max_dimension": "big"}}')
 
@@ -191,7 +195,8 @@ def _write_cfg(path, doc):
 
 
 def test_invalid_root_id_falls_back_to_defaults(tmp_path, caplog):
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     _write_cfg(cfg_file, {"roots": [{"id": "Has Space", "label": "x", "path": str(outputs)}]})
 
@@ -203,7 +208,8 @@ def test_invalid_root_id_falls_back_to_defaults(tmp_path, caplog):
 
 
 def test_missing_root_path_falls_back(tmp_path, caplog):
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     _write_cfg(cfg_file, {
         "roots": [{"id": "ghost", "label": "Ghost", "path": str(tmp_path / "no-such-dir")}]
@@ -217,7 +223,8 @@ def test_missing_root_path_falls_back(tmp_path, caplog):
 
 
 def test_empty_roots_list_accepted_with_warning(tmp_path, caplog):
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     _write_cfg(cfg_file, {"roots": []})
 
@@ -229,7 +236,8 @@ def test_empty_roots_list_accepted_with_warning(tmp_path, caplog):
 
 
 def test_duplicate_root_ids_rejected(tmp_path, caplog):
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     _write_cfg(cfg_file, {"roots": [
         {"id": "x", "label": "a", "path": str(outputs)},
@@ -244,7 +252,8 @@ def test_duplicate_root_ids_rejected(tmp_path, caplog):
 
 
 def test_max_dimension_out_of_range_rejected(tmp_path, caplog):
-    outputs = tmp_path / "outputs"; outputs.mkdir()
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
     cfg_file = tmp_path / "config.json"
     _write_cfg(cfg_file, {
         "roots": [{"id": "o", "label": "O", "path": str(outputs)}],
