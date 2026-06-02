@@ -111,11 +111,22 @@ def _resolve_dir(cfg: Config, root_id: str, raw_path: str) -> tuple[RootConfig, 
     return root, target
 
 
-def _kind_for(name: str, path: Path, image_exts: tuple[str, ...]) -> str:
+def _kind_for(
+    name: str,
+    path: Path,
+    image_exts: tuple[str, ...],
+    video_exts: tuple[str, ...] = (),
+    audio_exts: tuple[str, ...] = (),
+) -> str:
     if path.is_dir():
         return "folder"
-    if path.suffix.lower() in image_exts:
+    suffix = path.suffix.lower()
+    if suffix in image_exts:
         return "image"
+    if suffix in video_exts:
+        return "video"
+    if suffix in audio_exts:
+        return "audio"
     return "other"
 
 
@@ -195,7 +206,9 @@ async def _list(request: web.Request) -> web.Response:
                     "type": "dir" if entry.is_dir() else "file",
                     "size": int(st.st_size),
                     "mtime": int(st.st_mtime),
-                    "kind": _kind_for(entry.name, Path(entry.path), cfg.files.image_extensions),
+                    "kind": _kind_for(
+                        entry.name, Path(entry.path), cfg.files.image_extensions,
+                        cfg.files.video_extensions, cfg.files.audio_extensions),
                 })
         return out, None
 
@@ -354,8 +367,15 @@ async def _file_endpoint(request: web.Request, *, attachment: bool) -> web.Respo
         return _err("NOT_FOUND", "no such file", 404)
     if (resp := _reject_hidden(target, root.path)) is not None:
         return resp
-    if not attachment and target.suffix.lower() not in cfg.files.image_extensions:
-        return _err("PREVIEW_UNSUPPORTED", "preview is image-only in v1", 404)
+    if not attachment:
+        suffix = target.suffix.lower()
+        media_exts = cfg.files.video_extensions + cfg.files.audio_extensions
+        if suffix not in cfg.files.image_extensions and suffix not in media_exts:
+            return _err("PREVIEW_UNSUPPORTED", "preview is not supported for this file type", 404)
+        # Video/audio need HTTP Range (seeking, Safari) — FileResponse handles 206
+        # natively. Images keep the chunked streamer. nosniff stays on either path.
+        if suffix in media_exts:
+            return web.FileResponse(target, headers={"X-Content-Type-Options": "nosniff"})
     return await _send_file(request, target, attachment=attachment)
 
 

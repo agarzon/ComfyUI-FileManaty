@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.0 — 2026-06-02
+
+### Added
+
+- **Rich preview: video + audio.** The preview pane now plays video (`.mp4`, `.webm`)
+  and audio (`.mp3`, `.wav`, `.ogg`, `.m4a`, `.flac`) inline via native HTML5 players,
+  with the matching grid icons (🎬 / 🎵). Video previews also show the embedded-metadata
+  card (prompt fields + Load on canvas + Copy JSON). The allowed extensions are
+  configurable via `files.video_extensions` / `files.audio_extensions` in `config.json`.
+- Media is served via a Range-aware response (`206 Partial Content`), so seeking works
+  and Safari plays correctly. The `/preview` stored-XSS defenses are unchanged: only the
+  image/video/audio allow-lists preview inline, always with `X-Content-Type-Options: nosniff`;
+  HTML/SVG/other active types are still refused.
+
 ## v0.5.8 — 2026-06-02
 
 ### Changed

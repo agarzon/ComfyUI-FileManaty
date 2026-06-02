@@ -514,7 +514,7 @@ function renderGrid() {
         } else if (e.kind === "image") {
             cell.appendChild(makeIcon("image"));
         } else {
-            cell.appendChild(makeIcon("file"));
+            cell.appendChild(makeIcon(e.kind));
         }
         const label = document.createElement("div");
         label.textContent = e.name;
@@ -541,7 +541,8 @@ function renderGrid() {
 
 function makeIcon(kind) {
     const d = document.createElement("div");
-    d.textContent = kind === "folder" ? "📁" : kind === "image" ? "🖼" : "📄";
+    d.textContent = kind === "folder" ? "📁" : kind === "image" ? "🖼"
+        : kind === "video" ? "🎬" : kind === "audio" ? "🎵" : "📄";
     d.style.cssText = "font-size:34px;opacity:.65";
     return d;
 }
@@ -685,6 +686,35 @@ function renderPreview() {
             <div id="fm-meta" style="color:var(--fm-text-muted);font-size:12px;">Loading metadata…</div>
         `;
         loadMetadata(STATE.currentRoot, childPath);
+    } else if (sel.kind === "video") {
+        el.innerHTML = `
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--fm-bg);border-radius:4px;min-height:0;">
+                <video controls preload="metadata" src="${previewURL(STATE.currentRoot, childPath)}" style="max-width:100%;max-height:100%;"></video>
+            </div>
+            <div style="font-size:12px;line-height:1.6;">
+                <div><strong>${escapeHtml(sel.name)}</strong></div>
+                <div style="color:var(--fm-text-muted)">${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
+            </div>
+            <div style="display:flex;gap:6px;">
+                <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:var(--fm-accent);color:var(--fm-on-accent);padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
+            </div>
+            <div id="fm-meta" style="color:var(--fm-text-muted);font-size:12px;">Loading metadata…</div>
+        `;
+        loadMetadata(STATE.currentRoot, childPath);
+    } else if (sel.kind === "audio") {
+        el.innerHTML = `
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--fm-bg);border-radius:4px;min-height:0;gap:16px;">
+                <div style="font-size:54px;opacity:.45">🎵</div>
+                <audio controls src="${previewURL(STATE.currentRoot, childPath)}" style="width:90%;"></audio>
+            </div>
+            <div style="font-size:12px;line-height:1.6;">
+                <div><strong>${escapeHtml(sel.name)}</strong></div>
+                <div style="color:var(--fm-text-muted)">${sizeKb} KB · modified ${escapeHtml(dateStr)}</div>
+            </div>
+            <div style="display:flex;gap:6px;">
+                <a href="${downloadURL(STATE.currentRoot, childPath)}" style="background:var(--fm-accent);color:var(--fm-on-accent);padding:5px 12px;border-radius:3px;text-decoration:none;font-size:12px;">Download</a>
+            </div>
+        `;
     } else if (sel.kind === "folder") {
         el.innerHTML = `<div><strong>${escapeHtml(sel.name)}</strong> (folder)</div><div style="color:var(--fm-text-muted);font-size:12px">Double-click to open.</div>`;
     } else {

@@ -292,6 +292,54 @@ async def test_download_sets_attachment_header(client_factory, tmp_root):
     assert "pic.png" in cd
 
 
+async def test_preview_serves_video(client_factory, tmp_root):
+    (tmp_root / "clip.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"x" * 64)
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/preview?root=t&path=clip.mp4")
+    assert resp.status == 200
+    assert resp.headers["Content-Type"] == "video/mp4"
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    assert (await resp.read())[:4] == b"\x00\x00\x00\x18"
+
+
+async def test_preview_video_supports_range(client_factory, tmp_root):
+    (tmp_root / "clip.mp4").write_bytes(b"abcdefghij")
+    client = await client_factory()
+    resp = await client.get(
+        "/filemanaty/api/v1/preview?root=t&path=clip.mp4", headers={"Range": "bytes=0-3"}
+    )
+    assert resp.status == 206
+    assert await resp.read() == b"abcd"
+
+
+async def test_preview_serves_audio(client_factory, tmp_root):
+    (tmp_root / "sound.mp3").write_bytes(b"ID3" + b"\x00" * 64)
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/preview?root=t&path=sound.mp3")
+    assert resp.status == 200
+    assert resp.headers["Content-Type"] == "audio/mpeg"
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+
+async def test_preview_rejects_html(client_factory, tmp_root):
+    """Security regression guard: active/unknown types must not preview inline."""
+    (tmp_root / "evil.html").write_text("<script>alert(1)</script>")
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/preview?root=t&path=evil.html")
+    assert resp.status == 404
+    assert (await resp.json())["error"]["code"] == "PREVIEW_UNSUPPORTED"
+
+
+async def test_list_classifies_video_and_audio(client_factory, tmp_root):
+    (tmp_root / "clip.mp4").write_bytes(b"x")
+    (tmp_root / "sound.mp3").write_bytes(b"x")
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/list?root=t&path=")
+    by_name = {e["name"]: e["kind"] for e in (await resp.json())["data"]["entries"]}
+    assert by_name["clip.mp4"] == "video"
+    assert by_name["sound.mp3"] == "audio"
+
+
 async def test_preview_escape_returns_403(client_factory):
     client = await client_factory()
     resp = await client.get("/filemanaty/api/v1/preview?root=t&path=../etc")

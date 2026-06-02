@@ -64,6 +64,41 @@ def test_load_valid_json_config(tmp_path):
     assert cfg.thumbnails.max_dimension == 128
 
 
+def test_video_audio_extensions_default(tmp_path):
+    cfg = load_config(
+        config_path=tmp_path / "nope.json",
+        default_output_dir=tmp_path,
+        default_input_dir=tmp_path,
+    )
+    assert ".mp4" in cfg.files.video_extensions
+    assert ".webm" in cfg.files.video_extensions
+    assert ".mp3" in cfg.files.audio_extensions
+    assert ".flac" in cfg.files.audio_extensions
+
+
+def test_video_audio_extensions_override(tmp_path):
+    output_dir = tmp_path / "outputs"
+    output_dir.mkdir()
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        '{"files": {"video_extensions": [".mp4"], "audio_extensions": [".wav"]}}'
+    )
+    cfg = load_config(config_file, output_dir, output_dir)
+    assert cfg.files.video_extensions == (".mp4",)
+    assert cfg.files.audio_extensions == (".wav",)
+
+
+def test_video_extension_missing_dot_falls_back(tmp_path, caplog):
+    output_dir = tmp_path / "outputs"
+    output_dir.mkdir()
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"files": {"video_extensions": ["mp4"]}}')
+    with caplog.at_level("ERROR", logger="filemanaty"):
+        cfg = load_config(config_file, output_dir, output_dir)
+    # bad ext -> _ConfigError -> falls back to defaults (like image_extensions)
+    assert cfg.files.video_extensions == (".mp4", ".webm")
+
+
 def test_roots_are_writable_by_default(tmp_path):
     """A root with no 'writable' key is writable (preserves v0.2.0 behavior)."""
     custom = tmp_path / "custom"

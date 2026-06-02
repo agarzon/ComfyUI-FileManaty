@@ -22,6 +22,9 @@ log = logging.getLogger("filemanaty")
 DEFAULT_IMAGE_EXTS: tuple[str, ...] = (
     ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif",
 )
+# Browser-playable containers only — others fall back to icon + download.
+DEFAULT_VIDEO_EXTS: tuple[str, ...] = (".mp4", ".webm")
+DEFAULT_AUDIO_EXTS: tuple[str, ...] = (".mp3", ".wav", ".ogg", ".m4a", ".flac")
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,8 @@ class RootConfig:
 @dataclass(frozen=True)
 class FilesConfig:
     image_extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTS
+    video_extensions: tuple[str, ...] = DEFAULT_VIDEO_EXTS
+    audio_extensions: tuple[str, ...] = DEFAULT_AUDIO_EXTS
 
 
 @dataclass(frozen=True)
@@ -120,11 +125,18 @@ def _parse_config(raw: dict) -> Config:
     files_raw = raw.get("files", {})
     if not isinstance(files_raw, dict):
         raise _ConfigError(f"'files' must be an object, got {type(files_raw).__name__}")
-    extensions = tuple(str(x).lower() for x in files_raw.get("image_extensions", DEFAULT_IMAGE_EXTS))
-    for ext in extensions:
-        if not ext.startswith("."):
-            raise _ConfigError(f"image extension must start with '.': {ext!r}")
-    files = FilesConfig(image_extensions=extensions)
+    def _parse_exts(key: str, default: tuple[str, ...]) -> tuple[str, ...]:
+        exts = tuple(str(x).lower() for x in files_raw.get(key, default))
+        for ext in exts:
+            if not ext.startswith("."):
+                raise _ConfigError(f"{key} entry must start with '.': {ext!r}")
+        return exts
+
+    files = FilesConfig(
+        image_extensions=_parse_exts("image_extensions", DEFAULT_IMAGE_EXTS),
+        video_extensions=_parse_exts("video_extensions", DEFAULT_VIDEO_EXTS),
+        audio_extensions=_parse_exts("audio_extensions", DEFAULT_AUDIO_EXTS),
+    )
 
     thumbs_raw = raw.get("thumbnails", {})
     if not isinstance(thumbs_raw, dict):
