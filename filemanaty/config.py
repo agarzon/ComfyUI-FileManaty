@@ -1,12 +1,13 @@
 """Config loading + validation for ComfyUI-FileManaty.
 
 The config lives at <package_dir>/config.json. If the file is absent,
-the loader synthesizes safe defaults that auto-mount ComfyUI's output
-and input directories.
+the loader synthesizes safe defaults that auto-mount ComfyUI's output,
+input, and (single-user) workflows directories.
 
 Single public entry point: ``load_config(config_path, default_output_dir,
-default_input_dir) -> Config``. The caller (api.py at import time) is
-responsible for supplying the ComfyUI defaults via ``folder_paths``.
+default_input_dir, default_workflows_dir=None) -> Config``. The caller
+(api.py at import time) is responsible for supplying the ComfyUI defaults
+via ``folder_paths``.
 """
 from __future__ import annotations
 
@@ -64,24 +65,25 @@ def load_config(
     config_path: Path,
     default_output_dir: Path,
     default_input_dir: Path,
+    default_workflows_dir: Path | None = None,
 ) -> Config:
     """Load config from ``config_path`` or synthesize defaults if absent."""
     if not config_path.exists():
         log.info("filemanaty: no config at %s, using auto-mount defaults", config_path)
-        return _default_config(default_output_dir, default_input_dir)
+        return _default_config(default_output_dir, default_input_dir, default_workflows_dir)
 
     import json
     try:
         raw = json.loads(config_path.read_text())
     except json.JSONDecodeError as exc:
         log.error("filemanaty: malformed config at %s: %s; using defaults", config_path, exc)
-        return _default_config(default_output_dir, default_input_dir)
+        return _default_config(default_output_dir, default_input_dir, default_workflows_dir)
 
     try:
         return _parse_config(raw)
     except _ConfigError as exc:
         log.error("filemanaty: invalid config at %s: %s; using defaults", config_path, exc)
-        return _default_config(default_output_dir, default_input_dir)
+        return _default_config(default_output_dir, default_input_dir, default_workflows_dir)
 
 
 class _ConfigError(Exception):
@@ -163,12 +165,28 @@ def _parse_config(raw: dict) -> Config:
     return Config(roots=tuple(roots), files=files, thumbnails=thumbnails, write=write)
 
 
-def _default_config(output_dir: Path, input_dir: Path) -> Config:
+def _default_config(
+    output_dir: Path,
+    input_dir: Path,
+    workflows_dir: Path | None = None,
+) -> Config:
+    roots = [
+        RootConfig(id="outputs", label="Outputs", path=output_dir.resolve()),
+        RootConfig(id="inputs",  label="Inputs",  path=input_dir.resolve()),
+    ]
+    if workflows_dir is not None:
+        # The dir often doesn't exist until ComfyUI's first save — create it so the
+        # root is always present. Skip just this root if it can't be created.
+        try:
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            roots.append(RootConfig(
+                id="workflows", label="Workflows",
+                path=workflows_dir.resolve(), writable=True,
+            ))
+        except OSError as exc:
+            log.warning("filemanaty: could not mount Workflows root at %s: %s", workflows_dir, exc)
     return Config(
-        roots=(
-            RootConfig(id="outputs", label="Outputs", path=output_dir.resolve()),
-            RootConfig(id="inputs",  label="Inputs",  path=input_dir.resolve()),
-        ),
+        roots=tuple(roots),
         files=FilesConfig(),
         thumbnails=ThumbnailsConfig(),
     )
