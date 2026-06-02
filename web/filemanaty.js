@@ -1,5 +1,5 @@
 import { app } from "../../scripts/app.js";
-import { fetchRoots, fetchList, thumbnailURL, previewURL, downloadURL, fetchMetadata, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
+import { fetchRoots, fetchAbout, fetchList, thumbnailURL, previewURL, downloadURL, fetchMetadata, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
 import { doCopy, doCut, doPaste, runWithConflicts } from "./clipboard.js";
 import { clickSelect, selectAll } from "./selection.js";
 import { promptText, confirmDialog, toast, trashView, isDialogOpen } from "./dialogs.js";
@@ -39,6 +39,31 @@ function injectThemeTokens() {
         --fm-accent-soft: color-mix(in srgb, var(--fm-accent), transparent 80%);
         --fm-scrim: rgba(0,0,0,.5);
     }`;
+    document.head.appendChild(style);
+}
+
+const REPO_URL = "https://github.com/agarzon/ComfyUI-FileManaty";
+
+// Single source for the manatee mark — rendered inline in the header logo and
+// reused as a CSS mask for the top action-bar button icon. Shapes have no fill,
+// so `fill` (inline) or `background-color` through the mask (button) controls color.
+const MANATEE_SVG = `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="34" cy="32" rx="21" ry="14.5"/><ellipse cx="16" cy="37" rx="9.5" ry="8.5"/><path d="M50 23c9-4 14 2 12 11 2 9-3 15-12 11-3-1-5-5-5-11s2-10 5-11z"/><ellipse cx="26" cy="46" rx="4.3" ry="7.6" transform="rotate(22 26 46)"/><ellipse cx="37" cy="47" rx="4" ry="7" transform="rotate(7 37 47)"/></svg>`;
+
+const GITHUB_SVG = `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
+
+let cachedVersion = null;
+
+// The action-bar button lives in ComfyUI's topbar, outside #filemanaty-overlay, so
+// its icon CSS must be global. Mask + currentColor makes the manatee inherit the
+// theme color exactly like native PrimeIcons.
+function injectBrandStyles() {
+    if (document.getElementById("fm-brand-styles")) return;
+    const uri = `data:image/svg+xml,${encodeURIComponent(MANATEE_SVG)}`;
+    const style = document.createElement("style");
+    style.id = "fm-brand-styles";
+    style.textContent = `.fm-icon-manatee{display:inline-block;width:1.15rem;height:1.15rem;`
+        + `background-color:currentColor;-webkit-mask:url("${uri}") center/contain no-repeat;`
+        + `mask:url("${uri}") center/contain no-repeat}`;
     document.head.appendChild(style);
 }
 
@@ -85,6 +110,7 @@ export const STATE = {
 
 function openOverlay() {
     injectThemeTokens();
+    injectBrandStyles();
     if (!STATE.overlay) {
         STATE.overlay = buildOverlay();
         document.body.appendChild(STATE.overlay);
@@ -115,8 +141,15 @@ function buildOverlay() {
     ].join(";");
     root.innerHTML = `
         <div id="fm-header" style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--fm-border);background:var(--fm-bg-elevated);">
-            <strong>Files <span id="fm-bc" style="opacity:.7;font-weight:normal;margin-left:8px"></span></strong>
-            <button id="fm-close" style="background:none;border:0;color:inherit;font-size:18px;cursor:pointer">✕</button>
+            <div class="fm-brand">
+                <span class="fm-logo">${MANATEE_SVG}</span>
+                <span class="fm-name">File<span class="fm-name-accent">Manaty</span></span>
+                <span class="fm-ver" id="fm-version"></span>
+            </div>
+            <div class="fm-head-right">
+                <a class="fm-gh" href="${REPO_URL}" target="_blank" rel="noopener" title="View source on GitHub">${GITHUB_SVG}<span>GitHub</span></a>
+                <button id="fm-close" title="Close" style="background:none;border:0;color:inherit;font-size:18px;cursor:pointer;line-height:1">✕</button>
+            </div>
         </div>
         <div id="fm-tabs" style="display:flex;gap:4px;padding:6px 14px;border-bottom:1px solid var(--fm-border);background:var(--fm-bg-elevated);"></div>
         <input id="fm-file-input" type="file" multiple style="display:none">
@@ -143,13 +176,36 @@ function buildOverlay() {
     const style = document.createElement("style");
     style.textContent = `#filemanaty-overlay .fm-tb{background:var(--fm-hover);border:0;color:inherit;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px}
 #filemanaty-overlay .fm-tb:hover{background:var(--fm-border)}
-#filemanaty-overlay .fm-tb.danger{color:var(--fm-danger)}`;
+#filemanaty-overlay .fm-tb.danger{color:var(--fm-danger)}
+#filemanaty-overlay .fm-brand{display:flex;align-items:center;gap:10px}
+#filemanaty-overlay .fm-logo{display:inline-flex;width:26px;height:26px;flex:0 0 auto}
+#filemanaty-overlay .fm-logo svg{width:100%;height:100%;fill:var(--fm-accent)}
+#filemanaty-overlay .fm-name{font-size:15px;font-weight:700;letter-spacing:.2px;color:var(--fm-text)}
+#filemanaty-overlay .fm-name-accent{color:var(--fm-accent)}
+#filemanaty-overlay .fm-ver{font-size:11px;color:var(--fm-text-muted);background:var(--fm-bg-input);border:1px solid var(--fm-border);padding:1px 8px;border-radius:999px;font-variant-numeric:tabular-nums;letter-spacing:.3px}
+#filemanaty-overlay .fm-ver:empty{display:none}
+#filemanaty-overlay .fm-head-right{display:flex;align-items:center;gap:16px}
+#filemanaty-overlay .fm-gh{display:inline-flex;align-items:center;gap:6px;color:var(--fm-text-muted);text-decoration:none;font-size:12px;transition:color .15s}
+#filemanaty-overlay .fm-gh:hover{color:var(--fm-text)}
+#filemanaty-overlay .fm-gh svg{width:15px;height:15px}`;
     root.appendChild(style);
     return root;
 }
 
+// Fill the header version pill from /about (cached). Best-effort: on failure the
+// pill stays empty and is hidden by the `.fm-ver:empty` rule.
+async function loadVersion() {
+    const el = document.getElementById("fm-version");
+    if (!el) return;
+    try {
+        if (cachedVersion == null) cachedVersion = (await fetchAbout()).version;
+        if (cachedVersion) el.textContent = `v${cachedVersion}`;
+    } catch { /* leave pill empty */ }
+}
+
 async function initOverlay() {
     document.getElementById("fm-close").addEventListener("click", closeOverlay);
+    loadVersion();
     document.addEventListener("keydown", (e) => {
         if (!STATE.open) return;
         if (e.key === "Escape") {
@@ -671,6 +727,9 @@ function computeGridColumns() {
     return style.gridTemplateColumns.split(" ").length || 1;
 }
 
+// Inject the manatee icon CSS at load so the action-bar button renders with it.
+injectBrandStyles();
+
 app.registerExtension({
     name: "filemanaty.viewer",
     commands: [
@@ -680,7 +739,7 @@ app.registerExtension({
         { commandId: "filemanaty.open", combo: { key: "f", ctrl: true, shift: true } },
     ],
     actionBarButtons: [
-        { icon: "pi pi-folder", label: "Files", tooltip: "Open file manager", onClick: openOverlay },
+        { icon: "fm-icon-manatee", label: "Files", tooltip: "Open file manager", onClick: openOverlay },
     ],
     settings: await (async () => {
         // Fetch root ids so the DefaultRoot combo lists them.
@@ -692,22 +751,4 @@ app.registerExtension({
             return buildSettingsDefinitions([]);
         }
     })(),
-    async setup(app) {
-        app.extensionManager.registerSidebarTab({
-            id: "filemanaty",
-            title: "Files",
-            icon: "pi pi-folder",
-            type: "custom",
-            render: (container) => {
-                container.innerHTML = `
-                    <div style="padding:10px;">
-                        <button id="fm-sidebar-open" style="width:100%;padding:8px;background:var(--fm-accent);color:var(--fm-on-accent);border:0;border-radius:4px;cursor:pointer;">
-                            Open File Manager
-                        </button>
-                    </div>
-                `;
-                container.querySelector("#fm-sidebar-open").addEventListener("click", openOverlay);
-            },
-        });
-    },
 });

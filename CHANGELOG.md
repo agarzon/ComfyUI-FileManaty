@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.8 — 2026-06-02
+
+### Changed
+
+- **Single launcher + manatee branding.** Removed the redundant left sidebar tab;
+  the file manager now opens only from the top action-bar button (and `Ctrl+Shift+F`).
+  The button gains a custom manatee icon (inline SVG via CSS mask, so it follows the
+  theme like native icons). The overlay's plain "Files" header is now a branded bar:
+  manatee mark, two-tone **File**Manaty wordmark, a version pill, and a GitHub link.
+- **Version is now a single source of truth.** `filemanaty/__init__.py:__version__`
+  is the one place to bump; `pyproject.toml` reads it dynamically, and a new read-only
+  `GET /filemanaty/api/v1/about` serves it to the UI (so the header pill never goes stale).
+
 ## v0.5.7 — 2026-06-01
 
 ### Changed

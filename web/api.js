@@ -25,6 +25,10 @@ export async function fetchRoots() {
     return getJSON(`${BASE}/roots`);
 }
 
+export async function fetchAbout() {
+    return getJSON(`${BASE}/about`);
+}
+
 export async function fetchList(rootId, relPath, { includeHidden = false } = {}) {
     const q = new URLSearchParams({ root: rootId, path: relPath });
     if (includeHidden) q.set("include_hidden", "true");

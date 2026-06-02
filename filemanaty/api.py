@@ -146,6 +146,11 @@ async def _roots(request: web.Request) -> web.Response:
     return _ok({"roots": [{"id": r.id, "label": r.label, "writable": r.writable} for r in cfg.roots]})
 
 
+async def _about(request: web.Request) -> web.Response:
+    from filemanaty import __version__
+    return _ok({"version": __version__})
+
+
 async def _list(request: web.Request) -> web.Response:
     root_id = request.query.get("root")
     raw_path = request.query.get("path")
@@ -812,6 +817,7 @@ async def _upload(request: web.Request) -> web.Response:
 
 def attach_routes(app: web.Application) -> None:
     """Attach all routes to the given aiohttp Application."""
+    app.router.add_get(f"{API_PREFIX}/about", _about)
     app.router.add_get(f"{API_PREFIX}/roots", _roots)
     app.router.add_get(f"{API_PREFIX}/list", _list)
     app.router.add_get(f"{API_PREFIX}/thumbnail", _thumbnail)

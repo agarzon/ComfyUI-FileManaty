@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfyui-filemanaty"
-version = "0.5.7"
+dynamic = ["version"]
 description = "In-browser file manager for ComfyUI — browse, preview, upload, rename, move, copy, and trash files in configured roots"
 readme = "README.md"
 license = { text = "MIT" }
@@ -29,6 +29,9 @@ test = [
 
 [project.urls]
 Repository = "https://github.com/agarzon/ComfyUI-FileManaty"
+
+[tool.setuptools.dynamic]
+version = { attr = "filemanaty.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["filemanaty*"]

@@ -92,6 +92,17 @@ async def test_roots_endpoint_exposes_read_only(ro_rw_client):
     assert by_id["rw"]["writable"] is True
 
 
+async def test_about_returns_version(client_factory):
+    from filemanaty import __version__
+
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/about")
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["ok"] is True
+    assert body["data"]["version"] == __version__
+
+
 async def test_list_root_returns_top_level(client_factory):
     client = await client_factory()
     resp = await client.get("/filemanaty/api/v1/list?root=t&path=")
