@@ -111,7 +111,8 @@ Shipped recently: drag-resizable overlay panes, auto-mounted Workflows root, in-
 
 - 🔍 **Server-side & metadata search** — search across a whole root (past the listing cap) and find files by the **prompt / model / seed** that made them. *(In-folder name + type filtering shipped in v0.8.0.)*
 - 🔐 **Optional built-in authentication** — a lightweight password mode for small deployments.
-- 🖱️ **Right-click menu on the folder tree** (new folder, rename, delete, paste).
+- 🖱️ **Right-click menu on the folder tree** (new folder, rename, delete, paste), plus **drag-and-drop within a root** to move items straight in the tree.
+- 📁 **Folder drag-and-drop upload** — drop a folder from your desktop to upload every file inside it, not just individual files.
 - 👁️ **Double-click to open** — full-size image lightbox, inline video/audio player, doc editor, or 3D viewer.
 - 📝 **Text / JSON preview** with syntax highlighting — later, inline editing + save.
 - 🧊 **3D model preview** (Load3D).
