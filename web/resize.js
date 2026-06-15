@@ -92,8 +92,16 @@ export function initPaneResize(bodyEl) {
         document.addEventListener("pointerup", onUp);
     }
 
-    gutTree.addEventListener("pointerdown", (e) => startDrag("tree", e));
-    gutPreview.addEventListener("pointerdown", (e) => startDrag("preview", e));
+    // Capture the pointer on the gutter so drags stay tracked on touch/stylus
+    // (events still bubble to the document listeners below).
+    gutTree.addEventListener("pointerdown", (e) => {
+        gutTree.setPointerCapture?.(e.pointerId);
+        startDrag("tree", e);
+    });
+    gutPreview.addEventListener("pointerdown", (e) => {
+        gutPreview.setPointerCapture?.(e.pointerId);
+        startDrag("preview", e);
+    });
 
     // Double-click a gutter resets that column to its CSS default.
     gutTree.addEventListener("dblclick", () => {
