@@ -5,6 +5,7 @@ import { clickSelect, selectAll } from "./selection.js";
 import { promptText, confirmDialog, toast, trashView, isDialogOpen } from "./dialogs.js";
 import { attachContextMenu } from "./contextmenu.js";
 import { renderTree } from "./tree.js";
+import { initPaneResize } from "./resize.js";
 import { makeDraggable, makeDropTarget } from "./dnd.js";
 import * as settings from "./settings.js";
 import { buildSettingsDefinitions, KEYS as SETTINGS_KEYS } from "./settings.js";
@@ -194,9 +195,9 @@ function buildOverlay() {
             <button id="fm-refresh" class="fm-tb">↻ Refresh</button>
         </div>
         <div id="fm-body" style="flex:1;display:grid;grid-template-columns:200px 1fr 34%;min-height:0;">
-            <div id="fm-tree" style="overflow:auto;padding:8px;border-right:1px solid var(--fm-border);background:var(--fm-bg);font-size:13px;"></div>
+            <div id="fm-tree" style="overflow:auto;padding:8px;background:var(--fm-bg);font-size:13px;"></div>
             <div id="fm-grid" style="overflow:auto;padding:10px;display:grid;gap:8px;align-content:start;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));"></div>
-            <div id="fm-preview" style="border-left:1px solid var(--fm-border);padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--fm-bg);min-height:0;overflow:hidden;"></div>
+            <div id="fm-preview" style="padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--fm-bg);min-height:0;overflow:hidden;"></div>
         </div>
     `;
     const style = document.createElement("style");
@@ -215,7 +216,9 @@ function buildOverlay() {
 #filemanaty-overlay .fm-head-right{display:flex;align-items:center;gap:16px}
 #filemanaty-overlay .fm-gh{display:inline-flex;align-items:center;gap:6px;color:var(--fm-text-muted);text-decoration:none;font-size:12px;transition:color .15s}
 #filemanaty-overlay .fm-gh:hover{color:var(--fm-text)}
-#filemanaty-overlay .fm-gh svg{width:15px;height:15px}`;
+#filemanaty-overlay .fm-gh svg{width:15px;height:15px}
+#filemanaty-overlay .fm-gutter{background:var(--fm-border);cursor:col-resize;touch-action:none;transition:background .12s}
+#filemanaty-overlay .fm-gutter:hover{background:var(--fm-accent)}`;
     root.appendChild(style);
     return root;
 }
@@ -233,6 +236,7 @@ async function loadVersion() {
 
 async function initOverlay() {
     document.getElementById("fm-close").addEventListener("click", closeOverlay);
+    initPaneResize(document.getElementById("fm-body"));
     loadVersion();
     document.addEventListener("keydown", (e) => {
         if (!STATE.open) return;
