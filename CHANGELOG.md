@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.0 — 2026-06-14
+
+### Added
+
+- **Resizable overlay panes.** The folder tree and preview panes are now drag-resizable
+  via thin gutters on either side of the file grid — widen the tree for long folder names,
+  or trade preview width for grid space. Sizes persist per browser in `localStorage`, and
+  **double-clicking a gutter resets that pane** to its default (tree `200px` / preview `34%`).
+  Min-width clamps keep every pane usable (tree ≥120px, preview ≥160px, grid ≥200px) so
+  nothing collapses. The middle grid stays fluid and auto-reflows its thumbnail columns.
+  Frontend-only — a focused `web/resize.js` module, no backend changes, no new settings.
+
 ## v0.9.0 — 2026-06-02
 
 ### Added
