@@ -9,14 +9,21 @@ on:
         description: "Existing tag to (re)release, e.g. v0.4.0"
         required: true
 
-permissions:
-  contents: write          # lets GITHUB_TOKEN create the release
-
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   release:
+    needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write      # lets GITHUB_TOKEN create the release — this job only
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Tag push: the tag's tree. Manual run: the tag given as input — its
+          # CHANGELOG, not main's, which may have moved on since. (Same as publish.yml.)
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
       - name: Resolve tag and extract its CHANGELOG section
         id: notes
