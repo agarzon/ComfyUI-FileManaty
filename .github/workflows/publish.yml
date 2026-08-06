@@ -10,7 +10,13 @@ on:
         required: true
 
 jobs:
+  # A red tag publishes nothing. On a manual changelog backfill this tests the
+  # dispatch ref rather than the tag — costs a minute, never ships a bad build.
+  test:
+    uses: ./.github/workflows/test.yml
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
     env:
       COMFY_API_KEY: ${{ secrets.COMFY_API_KEY }}
