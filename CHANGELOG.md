@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.11.0 — 2026-08-05
+
+### Changed
+
+- **One trash, not one per root** ([#4](https://github.com/agarzon/ComfyUI-FileManaty/issues/4)).
+  The Trash view showed only the current root's deleted items, so switching roots looked like
+  switching trash bins. It is now a single list of everything you have deleted, newest first,
+  with each item labelled by the root it came from; Empty trash empties all of them.
+
+  Storage is still a `.filemanaty_trash/` inside each root — the same thing macOS and Windows
+  do with a per-volume `.Trashes` behind one Trash icon — so deleting and restoring stay
+  instant same-filesystem renames instead of copying gigabytes between disks.
+
+  API: `GET /trash/list` no longer takes a `root` query param and returns items from every
+  root, each carrying a `root` field. `restore` and `purge` are unchanged.
+
 ## v0.10.1 — 2026-08-05
 
 ### Fixed

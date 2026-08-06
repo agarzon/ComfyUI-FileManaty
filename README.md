@@ -26,7 +26,7 @@
 - 🖼️ **Rich previews** — inline images, an HTML5 **video** player, and an **audio** player. Generated files show their **resolution** (`1024 × 1024`), size, and date at a glance.
 - 🧠 **See the generation behind the file** — embedded ComfyUI metadata (positive/negative prompt, seed, model, LoRAs) surfaced in the preview, with one-click **Copy JSON** and **Load on canvas** to drop the workflow straight onto your graph.
 - 📤 **Full write operations** — create folders, rename, upload (button or drag from your desktop), copy/cut/paste, and move — within and across roots.
-- ♻️ **Recoverable trash** — deletes go to a per-root trash you can restore from or purge. `Shift+Delete` removes permanently.
+- ♻️ **Recoverable trash** — deletes go to one trash view spanning every root, to restore from or purge. `Shift+Delete` removes permanently.
 - 🛡️ **Read-only roots** — mount any root browse-only; the server rejects every write and the toolbar hides write actions.
 - 🎨 **Native look & feel** — follows your active ComfyUI theme (light, dark, or custom) live, via the same design tokens ComfyUI uses.
 - ⌨️ **Fast** — keyboard navigation, multi-select, drag-and-drop, right-click context menus, and `Ctrl+Shift+F` to open.

@@ -443,7 +443,7 @@ async function onToolbarAction(act) {
         if (act === "cut") return doCut();
         if (act === "paste") return await doPaste();
         if (act === "delete") return await actDelete(false);
-        if (act === "trash") return await trashView(STATE.currentRoot, () => refresh());
+        if (act === "trash") return await trashView(() => refresh());
     } catch (e) {
         console.error("filemanaty action failed:", e);
         toast(e.message || "Action failed", "error");

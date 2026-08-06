@@ -882,10 +882,21 @@ async def test_delete_trash_dir_rejected(client_factory):
 async def test_trash_list_endpoint(client_factory):
     client = await client_factory()
     await _post(client, "/filemanaty/api/v1/delete", {"root": "t", "items": ["top.txt"]})
-    resp = await client.get("/filemanaty/api/v1/trash/list?root=t")
+    resp = await client.get("/filemanaty/api/v1/trash/list")
     assert resp.status == 200
     items = (await resp.json())["data"]["items"]
     assert items[0]["original_name"] == "top.txt"
+    assert items[0]["root"] == "t"
+
+
+async def test_trash_list_is_unified_across_roots(two_root_client):
+    client = await two_root_client()
+    await _post(client, "/filemanaty/api/v1/delete", {"root": "t", "items": ["top.txt"]})
+    await _post(client, "/filemanaty/api/v1/delete", {"root": "u", "items": ["existing.txt"]})
+    resp = await client.get("/filemanaty/api/v1/trash/list")
+    items = (await resp.json())["data"]["items"]
+    assert {(i["root"], i["original_name"]) for i in items} == {
+        ("t", "top.txt"), ("u", "existing.txt")}
 
 
 async def test_trash_restore_endpoint(client_factory):
@@ -953,7 +964,7 @@ async def test_trash_purge_selected(client_factory):
     tid = (await d.json())["data"]["results"][0]["id"]
     resp = await _post(client, "/filemanaty/api/v1/trash/purge", {"root": "t", "ids": [tid]})
     assert resp.status == 200
-    listing = await client.get("/filemanaty/api/v1/trash/list?root=t")
+    listing = await client.get("/filemanaty/api/v1/trash/list")
     assert (await listing.json())["data"]["items"] == []
 
 
@@ -962,7 +973,7 @@ async def test_trash_purge_all(client_factory):
     await _post(client, "/filemanaty/api/v1/delete", {"root": "t", "items": ["top.txt"]})
     resp = await _post(client, "/filemanaty/api/v1/trash/purge", {"root": "t", "all": True})
     assert resp.status == 200
-    listing = await client.get("/filemanaty/api/v1/trash/list?root=t")
+    listing = await client.get("/filemanaty/api/v1/trash/list")
     assert (await listing.json())["data"]["items"] == []
 
 

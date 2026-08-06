@@ -99,12 +99,12 @@ export function conflictDialog(names) {
     });
 }
 
-// Opens a per-root trash panel. onChange() is called after restore/purge so the
-// caller can refresh the main grid.
-export async function trashView(root, onChange) {
+// Opens the unified trash panel (all roots). onChange() is called after
+// restore/purge so the caller can refresh the main grid.
+export async function trashView(onChange) {
     const { box, close } = overlayShell(`
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-            <div style="font-weight:600">Trash — ${escapeHtml(root)}</div>
+            <div style="font-weight:600">Trash</div>
             <button id="fm-trash-empty" style="padding:4px 10px;background:var(--fm-danger);border:0;color:var(--fm-on-accent);border-radius:4px;cursor:pointer">Empty trash</button>
         </div>
         <div id="fm-trash-list" style="max-height:50vh;overflow:auto;font-size:13px"></div>
@@ -113,7 +113,7 @@ export async function trashView(root, onChange) {
     const listEl = box.querySelector("#fm-trash-list");
 
     async function reload() {
-        const { items } = await fetchTrash(root);
+        const { items } = await fetchTrash();
         if (!items.length) { listEl.innerHTML = "<div style='color:var(--fm-text-muted);padding:8px'>Trash is empty.</div>"; return; }
         listEl.innerHTML = "";
         for (const it of items) {
@@ -121,19 +121,19 @@ export async function trashView(root, onChange) {
             row.style.cssText = "display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid var(--fm-border)";
             row.innerHTML = `<div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                     <div>${escapeHtml(it.original_name)}</div>
-                    <div style="font-size:11px;color:var(--fm-text-muted)">${escapeHtml(it.original_rel_path)} · ${escapeHtml(it.deleted_at || "")}</div>
+                    <div style="font-size:11px;color:var(--fm-text-muted)">${escapeHtml(it.root)} · ${escapeHtml(it.original_rel_path)} · ${escapeHtml(it.deleted_at || "")}</div>
                 </div>
                 <button data-restore style="padding:3px 8px;background:var(--fm-accent);border:0;color:var(--fm-on-accent);border-radius:3px;cursor:pointer">Restore</button>
                 <button data-purge style="padding:3px 8px;background:#553;border:0;color:var(--fm-danger);border-radius:3px;cursor:pointer">Delete</button><!-- status color -->`;
             row.querySelector("[data-restore]").onclick = async () => {
                 try {
-                    const r = await restoreWithConflict(root, it.id);
+                    const r = await restoreWithConflict(it.root, it.id);
                     if (r !== null) { await reload(); onChange && onChange(); toast("Restored", "success"); }
                 } catch (e) { toast(e.message, "error"); }
             };
             row.querySelector("[data-purge]").onclick = async () => {
                 if (!(await confirmDialog("Permanently delete?", it.original_name, { danger: true }))) return;
-                try { await purgeTrash(root, { ids: [it.id] }); await reload(); onChange && onChange(); }
+                try { await purgeTrash(it.root, { ids: [it.id] }); await reload(); onChange && onChange(); }
                 catch (e) { toast(e.message, "error"); }
             };
             listEl.appendChild(row);
@@ -142,8 +142,11 @@ export async function trashView(root, onChange) {
 
     box.querySelector("#fm-trash-empty").onclick = async () => {
         if (!(await confirmDialog("Empty trash?", "All trashed items will be permanently deleted.", { danger: true }))) return;
-        try { await purgeTrash(root, { all: true }); await reload(); onChange && onChange(); }
-        catch (e) { toast(e.message, "error"); }
+        try {
+            const { items } = await fetchTrash();
+            for (const r of new Set(items.map((i) => i.root))) await purgeTrash(r, { all: true });
+            await reload(); onChange && onChange();
+        } catch (e) { toast(e.message, "error"); }
     };
     box.querySelector("#fm-trash-close").onclick = close;
     await reload();
