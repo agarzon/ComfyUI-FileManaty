@@ -142,8 +142,8 @@ export async function trashView(onChange) {
 
     box.querySelector("#fm-trash-empty").onclick = async () => {
         if (!(await confirmDialog("Empty trash?", "All trashed items will be permanently deleted.", { danger: true }))) return;
-        const { items } = await fetchTrash();
         try {
+            const { items } = await fetchTrash();
             for (const r of new Set(items.map((i) => i.root))) await purgeTrash(r, { all: true });
             await reload(); onChange && onChange();
         } catch (e) { toast(e.message, "error"); }

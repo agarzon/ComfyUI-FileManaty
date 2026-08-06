@@ -676,10 +676,12 @@ async def _trash_list(request: web.Request) -> web.Response:
     """
     cfg = _get_config()
     loop = asyncio.get_running_loop()
-    items: list[dict[str, Any]] = []
-    for root in cfg.roots:
-        for item in await loop.run_in_executor(None, ops.list_trash, root.path):
-            items.append({**item, "root": root.id})
+    # scanned concurrently: a root on a slow/network mount shouldn't stack its
+    # latency on top of every other root's
+    per_root = await asyncio.gather(*(
+        loop.run_in_executor(None, ops.list_trash, root.path) for root in cfg.roots))
+    items = [{**item, "root": root.id}
+             for root, entries in zip(cfg.roots, per_root) for item in entries]
     items.sort(key=lambda i: i.get("deleted_at") or "", reverse=True)
     return _ok({"items": items})
 
