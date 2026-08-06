@@ -25,7 +25,7 @@
 - 🗂️ **Explorer-style file manager** — a folder tree, a thumbnail grid, and a live preview pane, all in one fullscreen overlay with **drag-resizable panes** (double-click a divider to reset).
 - 🖼️ **Rich previews** — inline images, an HTML5 **video** player, and an **audio** player. Generated files show their **resolution** (`1024 × 1024`), size, and date at a glance.
 - 🧠 **See the generation behind the file** — embedded ComfyUI metadata (positive/negative prompt, seed, model, LoRAs) surfaced in the preview, with one-click **Copy JSON** and **Load on canvas** to drop the workflow straight onto your graph.
-- 📤 **Full write operations** — create folders, rename, upload (button or drag from your desktop), copy/cut/paste, and move — within and across roots.
+- 📤 **Full write operations** — create folders, rename, upload **files or whole folders** (button or drag from your desktop, with a progress bar), copy/cut/paste, and move — within and across roots.
 - ♻️ **Recoverable trash** — deletes go to one trash view spanning every root, to restore from or purge. `Shift+Delete` removes permanently.
 - 🛡️ **Read-only roots** — mount any root browse-only; the server rejects every write and the toolbar hides write actions.
 - 🎨 **Native look & feel** — follows your active ComfyUI theme (light, dark, or custom) live, via the same design tokens ComfyUI uses.
@@ -107,12 +107,11 @@ FileManaty can write to your filesystem, so please read this.
 
 ## 🗺️ Roadmap
 
-Shipped recently: drag-resizable overlay panes, auto-mounted Workflows root, in-folder name + type filter, rich video + audio preview, embedded-metadata cards, Load-on-canvas, and a native theme-following UI. Coming next:
+Shipped recently: folder upload (drop a folder or pick one), one unified trash, drag-resizable overlay panes, auto-mounted Workflows root, in-folder name + type filter, rich video + audio preview, embedded-metadata cards, Load-on-canvas, and a native theme-following UI. Coming next:
 
 - 🔍 **Server-side & metadata search** — search across a whole root (past the listing cap) and find files by the **prompt / model / seed** that made them. *(In-folder name + type filtering shipped in v0.8.0.)*
 - 🔐 **Optional built-in authentication** — a lightweight password mode for small deployments.
 - 🖱️ **Right-click menu on the folder tree** (new folder, rename, delete, paste), plus **drag-and-drop within a root** to move items straight in the tree.
-- 📁 **Folder drag-and-drop upload** — drop a folder from your desktop to upload every file inside it, not just individual files.
 - 👁️ **Double-click to open** — full-size image lightbox, inline video/audio player, doc editor, or 3D viewer.
 - 📝 **Text / JSON preview** with syntax highlighting — later, inline editing + save.
 - 🧊 **3D model preview** (Load3D).

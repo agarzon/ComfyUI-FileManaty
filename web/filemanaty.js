@@ -2,11 +2,12 @@ import { app } from "../../scripts/app.js";
 import { fetchRoots, fetchAbout, fetchList, thumbnailURL, previewURL, downloadURL, fetchMetadata, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
 import { doCopy, doCut, doPaste, runWithConflicts } from "./clipboard.js";
 import { clickSelect, selectAll } from "./selection.js";
-import { promptText, confirmDialog, toast, trashView, isDialogOpen } from "./dialogs.js";
+import { promptText, confirmDialog, conflictDialog, toast, trashView, progressBar, isDialogOpen } from "./dialogs.js";
 import { attachContextMenu } from "./contextmenu.js";
 import { renderTree } from "./tree.js";
 import { initPaneResize } from "./resize.js";
 import { makeDraggable, makeDropTarget } from "./dnd.js";
+import { walkDrop, filesFromPicker, dirsToCreate } from "./upload.js";
 import * as settings from "./settings.js";
 import { buildSettingsDefinitions, KEYS as SETTINGS_KEYS } from "./settings.js";
 
@@ -169,6 +170,7 @@ function buildOverlay() {
         </div>
         <div id="fm-tabs" style="display:flex;gap:4px;padding:6px 14px;border-bottom:1px solid var(--fm-border);background:var(--fm-bg-elevated);"></div>
         <input id="fm-file-input" type="file" multiple style="display:none">
+        <input id="fm-dir-input" type="file" multiple webkitdirectory style="display:none">
         <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
             <span id="fm-breadcrumb"></span>
             <input id="fm-search-input" class="fm-search" type="text" placeholder="Filter…" autocomplete="off">
@@ -186,6 +188,7 @@ function buildOverlay() {
             <span id="fm-selcount" style="opacity:.7;margin-right:6px"></span>
             <button class="fm-tb" data-act="newfolder">＋ New Folder</button>
             <button class="fm-tb" data-act="upload">⬆ Upload</button>
+            <button class="fm-tb" data-act="uploaddir">⬆ Folder</button>
             <button class="fm-tb" data-act="rename">✎ Rename</button>
             <button class="fm-tb" data-act="copy">⧉ Copy</button>
             <button class="fm-tb" data-act="cut">✂ Cut</button>
@@ -331,11 +334,13 @@ async function initOverlay() {
         searchInput.focus();
     });
 
-    const fileInput = document.getElementById("fm-file-input");
-    fileInput.addEventListener("change", () => {
-        if (fileInput.files.length) uploadFileList(fileInput.files).catch((x) => toast(x.message, "error"));
-        fileInput.value = "";
-    });
+    for (const id of ["fm-file-input", "fm-dir-input"]) {
+        const input = document.getElementById(id);
+        input.addEventListener("change", () => {
+            if (input.files.length) uploadTree(filesFromPicker(input.files)).catch((x) => toast(x.message, "error"));
+            input.value = "";
+        });
+    }
 
     const gridEl = document.getElementById("fm-grid");
     gridEl.addEventListener("dragover", (e) => {
@@ -347,9 +352,12 @@ async function initOverlay() {
     gridEl.addEventListener("dragleave", () => { gridEl.style.outline = "none"; });
     gridEl.addEventListener("drop", (e) => {
         gridEl.style.outline = "none";
-        if (e.dataTransfer && e.dataTransfer.files.length) {
+        // Same guard as dragover: `types` is the reliable signal for a file drop,
+        // `files` is the flat view that misses the folders walkDrop is here for.
+        if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) {
             e.preventDefault();
-            uploadFileList(e.dataTransfer.files).catch((x) => toast(x.message, "error"));
+            // walkDrop claims the item list synchronously — do not await first
+            walkDrop(e.dataTransfer).then(uploadTree).catch((x) => toast(x.message, "error"));
         }
     });
     // Click on empty grid space (not a cell) clears the current selection.
@@ -424,7 +432,7 @@ export async function navigateTo(rootId, relPath) {
 // (The backend enforces this regardless; this just avoids dead-end clicks.)
 function updateWritableUI() {
     const writable = currentRootWritable();
-    const writeActs = new Set(["newfolder", "upload", "rename", "paste", "delete"]);
+    const writeActs = new Set(["newfolder", "upload", "uploaddir", "rename", "paste", "delete"]);
     document.querySelectorAll("#fm-toolbar .fm-tb").forEach((b) => {
         if (!writeActs.has(b.dataset.act)) return;
         b.disabled = !writable;
@@ -438,6 +446,7 @@ async function onToolbarAction(act) {
     try {
         if (act === "newfolder") return await actNewFolder();
         if (act === "upload") { document.getElementById("fm-file-input").click(); return; }
+        if (act === "uploaddir") { document.getElementById("fm-dir-input").click(); return; }
         if (act === "rename") return await actRename();
         if (act === "copy") return doCopy();
         if (act === "cut") return doCut();
@@ -450,16 +459,45 @@ async function onToolbarAction(act) {
     }
 }
 
-async function uploadFileList(files) {
-    const list = [...files];
-    toast(`Uploading ${list.length} file(s)…`);
-    const data = await runWithConflicts((onConflict) =>
-        apiUpload(STATE.currentRoot, STATE.currentPath, list, onConflict));
-    if (data === null) return;  // cancelled at conflict
+const joinPath = (a, b) => (a && b ? `${a}/${b}` : a || b);
+
+// Upload a flat [{file, dir}] list into the current folder, creating the folders
+// it needs first. One request per file, so progress is real and a conflict or a
+// failure on one file no longer abandons the rest of the batch.
+async function uploadTree(entries) {
+    if (!entries.length) return;
+    for (const dir of dirsToCreate(entries)) {   // sorted: parents before children
+        const cut = dir.lastIndexOf("/");
+        const parent = joinPath(STATE.currentPath, cut < 0 ? "" : dir.slice(0, cut));
+        // on_conflict "replace" on a folder means exist_ok — this is mkdir -p
+        await apiMkdir(STATE.currentRoot, parent, dir.slice(cut + 1), "replace");
+    }
+    const bar = progressBar(entries.length);
+    let policy = null;   // set once the user ticks "do this for all conflicts"
+    let done = 0, failed = 0, cancelled = false;
+    try {
+        for (const { file, dir } of entries) {
+            bar.set(done + 1, file.name);   // 1-based: the file in flight, and it reaches total
+            const path = joinPath(STATE.currentPath, dir);
+            try {
+                await apiUpload(STATE.currentRoot, path, [file], policy);
+            } catch (e) {
+                if (e.status !== 409) { failed++; done++; continue; }
+                const choice = await conflictDialog(e.conflicts || [file.name]);
+                if (!choice) { cancelled = true; break; }  // stop the queue
+                if (choice.all) policy = choice.policy;
+                try { await apiUpload(STATE.currentRoot, path, [file], choice.policy); }
+                catch { failed++; }
+            }
+            done++;
+        }
+    } finally {
+        bar.done();
+    }
     await refresh();
-    const failed = (data.results || []).filter((r) => r.status === "error");
-    if (failed.length) toast(`${failed.length} upload(s) failed`, "error");
-    else toast("Upload complete", "success");
+    if (failed) toast(`${failed} of ${entries.length} upload(s) failed`, "error");
+    else if (cancelled) toast(`Cancelled — ${done} of ${entries.length} file(s) uploaded`);
+    else toast(`Uploaded ${done} file(s)`, "success");
 }
 
 export async function actNewFolder() {

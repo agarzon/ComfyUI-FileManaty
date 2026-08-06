@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.12.0 — 2026-08-05
+
+### Added
+
+- **Folder upload** ([#5](https://github.com/agarzon/ComfyUI-FileManaty/issues/5)). Drop a folder
+  from your desktop onto the grid and every file inside it uploads, subfolders and all — the
+  folder structure is recreated on the server. The new **⬆ Folder** toolbar button does the same
+  from a picker, for when dragging is awkward.
+
+  Uploads now go **one file per request** with a **progress bar** (`12/48 · sunset.png`), which
+  also fixes an older wart: a conflict on file 30 of 48 used to abort the rest of the batch.
+  Now each file stands alone, and the conflict dialog's **"do this for all conflicts"** checkbox
+  applies your choice to the remaining queue instead of asking again per file.
+
+  Hidden files and folders (`.DS_Store`, `.git/`) are skipped — the server rejects hidden names
+  in new paths, so one stray dotfile would otherwise fail the upload it rode in with.
+
 ## v0.11.0 — 2026-08-05
 
 ### Changed
