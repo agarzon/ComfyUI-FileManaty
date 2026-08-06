@@ -6,6 +6,11 @@ on:
     branches: ["main"]
   workflow_call:        # release.yml / publish.yml gate their tag jobs on this
 
+# Declared here so it applies to every caller: this job runs repo code
+# (`pip install -e .`) and never needs to write anything back.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,8 +23,8 @@ jobs:
 
       - name: Backend tests
         run: |
-          pip install -e ".[test]"
-          pytest -q
+          python -m pip install -e ".[test]"
+          python -m pytest -q
 
       - uses: actions/setup-node@v6
         with:
