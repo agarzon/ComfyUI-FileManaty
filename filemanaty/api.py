@@ -668,17 +668,20 @@ async def _rename(request: web.Request) -> web.Response:
 
 
 async def _trash_list(request: web.Request) -> web.Response:
+    """One unified trash listing across every root, newest first.
+
+    Storage stays per-root (like a per-volume .Trashes) so trashing and
+    restoring are same-filesystem renames; each item carries its root id so
+    restore/purge can route back to it.
+    """
     cfg = _get_config()
-    root_id = request.query.get("root")
-    if root_id is None:
-        return _err("BAD_REQUEST", "missing 'root' query param", 400)
-    try:
-        root = _find_root(cfg, root_id)
-    except PathEscapeError as exc:
-        return _err("ACCESS_DENIED", str(exc), 403)
     loop = asyncio.get_running_loop()
-    items = await loop.run_in_executor(None, ops.list_trash, root.path)
-    return _ok({"root": root_id, "items": items})
+    items: list[dict[str, Any]] = []
+    for root in cfg.roots:
+        for item in await loop.run_in_executor(None, ops.list_trash, root.path):
+            items.append({**item, "root": root.id})
+    items.sort(key=lambda i: i.get("deleted_at") or "", reverse=True)
+    return _ok({"items": items})
 
 
 async def _trash_restore(request: web.Request) -> web.Response:

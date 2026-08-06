@@ -92,8 +92,8 @@ export function copy(srcRoot, srcItems, dstRoot, dstPath, onConflict) {
 export function move(srcRoot, srcItems, dstRoot, dstPath, onConflict) {
     return postJSON("/move", { src_root: srcRoot, src_items: srcItems, dst_root: dstRoot, dst_path: dstPath, on_conflict: onConflict ?? null });
 }
-export function fetchTrash(root) {
-    return getJSON(`${BASE}/trash/list?${new URLSearchParams({ root })}`);
+export function fetchTrash() {
+    return getJSON(`${BASE}/trash/list`);
 }
 export function restoreTrash(root, ids, onConflict) {
     return postJSON("/trash/restore", { root, ids, on_conflict: onConflict ?? null });
