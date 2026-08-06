@@ -25,7 +25,9 @@ from filemanaty.config import Config, RootConfig, load_config
 from filemanaty.security import (
     PathEscapeError, has_hidden_component, safe_name, safe_resolve,
 )
-from filemanaty.thumbs import ThumbError, cache_key, cache_path, generate_thumbnail, tmp_cache_path
+from filemanaty.thumbs import (
+    ThumbError, cache_path, generate_thumbnail, invalidate, prune, tmp_cache_path,
+)
 
 log = logging.getLogger("filemanaty")
 
@@ -102,6 +104,19 @@ async def _json_body(request: web.Request) -> dict[str, Any]:
     except Exception:
         return {}
     return body if isinstance(body, dict) else {}
+
+
+def _rel_to_root(root: RootConfig, target: Path) -> str:
+    """Canonical posix path of ``target`` within ``root``. Callers pass paths
+    that already went through safe_resolve, so containment is guaranteed."""
+    return target.resolve().relative_to(root.path.resolve()).as_posix()
+
+
+async def _drop_thumbs(root: RootConfig, target: Path) -> None:
+    """Evict cached thumbnails for ``target`` after its bytes were removed or
+    replaced — a thumbnail outliving its source leaks deleted image content."""
+    await asyncio.get_running_loop().run_in_executor(
+        None, invalidate, _thumb_cache_dir(), root.id, _rel_to_root(root, target))
 
 
 def _resolve_dir(cfg: Config, root_id: str, raw_path: str) -> tuple[RootConfig, Path]:
@@ -184,35 +199,41 @@ async def _list(request: web.Request) -> web.Response:
 
     loop = asyncio.get_running_loop()
 
-    def scan() -> tuple[Optional[list[dict[str, Any]]], Optional[str]]:
-        """Returns (entries, None) on success or (None, error_code) on filesystem error."""
+    def scan() -> tuple[Optional[list[dict[str, Any]]], dict[str, int], Optional[str]]:
+        """Returns (entries, live, None) on success or (None, {}, error_code) on
+        filesystem error. ``live`` is every name in the directory (hidden ones
+        included) mapped to its mtime_ns, 0 for dirs — the input thumbs.prune
+        needs to spot sources that changed behind our back."""
         if not target.exists():
-            return None, "NOT_FOUND"
+            return None, {}, "NOT_FOUND"
         if not target.is_dir():
-            return None, "NOT_A_DIR"
+            return None, {}, "NOT_A_DIR"
         out: list[dict[str, Any]] = []
+        live: dict[str, int] = {}
         with os.scandir(target) as it:
             for entry in it:
-                if _is_hidden(entry.name) and not include_hidden:
-                    continue
                 if len(out) > MAX_LIST_ENTRIES:
                     break
                 try:
                     st = entry.stat()
                 except OSError:
                     continue
+                is_dir = entry.is_dir()
+                live[entry.name] = 0 if is_dir else st.st_mtime_ns
+                if _is_hidden(entry.name) and not include_hidden:
+                    continue
                 out.append({
                     "name": entry.name,
-                    "type": "dir" if entry.is_dir() else "file",
+                    "type": "dir" if is_dir else "file",
                     "size": int(st.st_size),
                     "mtime": int(st.st_mtime),
                     "kind": _kind_for(
                         entry.name, Path(entry.path), cfg.files.image_extensions,
                         cfg.files.video_extensions, cfg.files.audio_extensions),
                 })
-        return out, None
+        return out, live, None
 
-    entries, err_code = await loop.run_in_executor(None, scan)
+    entries, live, err_code = await loop.run_in_executor(None, scan)
     if err_code == "NOT_FOUND":
         return _err("NOT_FOUND", f"no such path: {raw_path!r}", 404)
     if err_code == "NOT_A_DIR":
@@ -221,9 +242,15 @@ async def _list(request: web.Request) -> web.Response:
     truncated = len(entries) > MAX_LIST_ENTRIES
     entries = entries[:MAX_LIST_ENTRIES]
 
-    rel = target.resolve().relative_to(root.path.resolve()).as_posix()
+    rel = _rel_to_root(root, target)
     if rel == ".":
         rel = ""
+
+    # Self-heal the thumb cache for this folder. Skipped when the scan stopped
+    # early: an incomplete `live` would look like mass deletion to prune().
+    if not truncated:
+        await loop.run_in_executor(
+            None, prune, _thumb_cache_dir(), root_id, rel, live)
     if rel == "":
         parent_field: Optional[str] = None
     elif "/" not in rel:
@@ -249,11 +276,12 @@ async def _thumbnail(request: web.Request) -> web.Response:
     cfg = _get_config()
 
     try:
-        rel = _strip_path(raw_path)
         root = _find_root(cfg, root_id)
-        target = safe_resolve(root.path, rel)
+        target = safe_resolve(root.path, _strip_path(raw_path))
     except PathEscapeError as exc:
         return _err("ACCESS_DENIED", str(exc), 403)
+    # Canonical rel — must match what _drop_thumbs derives, or eviction misses.
+    rel = _rel_to_root(root, target)
 
     if not target.is_file():
         return _err("NOT_FOUND", "no such file", 404)
@@ -265,14 +293,12 @@ async def _thumbnail(request: web.Request) -> web.Response:
         return _err("THUMB_UNSUPPORTED", "not an image extension", 404)
 
     mtime_ns = target.stat().st_mtime_ns
-    key = cache_key(root_id, rel, mtime_ns, cfg.thumbnails.max_dimension)
-
-    cache_dir = _thumb_cache_dir()
-    out_path = cache_path(cache_dir, key)
+    out_path = cache_path(
+        _thumb_cache_dir(), root_id, rel, mtime_ns, cfg.thumbnails.max_dimension)
     loop = asyncio.get_running_loop()
 
     def write_and_read() -> bytes:
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         if out_path.exists():
             return out_path.read_bytes()
         return b""  # caller will generate then call store_and_return
@@ -297,7 +323,7 @@ async def _thumbnail(request: web.Request) -> web.Response:
         # Unique per-call tmp name avoids two concurrent writers (same process)
         # fighting over one temp file. Replace is atomic; if a second writer
         # wins the race, the bytes are identical anyway.
-        tmp = tmp_cache_path(cache_dir, key)
+        tmp = tmp_cache_path(out_path)
         tmp.write_bytes(payload)
         tmp.replace(out_path)
 
@@ -526,6 +552,10 @@ async def _transfer(request: web.Request, *, move: bool) -> web.Response:
         try:
             await loop.run_in_executor(
                 None, functools.partial(op, src, target, replace=status == "replace"))
+            if move:
+                await _drop_thumbs(src_root, src)
+            if status == "replace":
+                await _drop_thumbs(dst_root, target)
             results.append({"name": target.name, "status": "done"})
         except OSError as exc:
             log.info("filemanaty: transfer failed for %s: %s", src.name, exc)
@@ -585,6 +615,7 @@ async def _delete(request: web.Request) -> web.Response:
                 tid = await loop.run_in_executor(
                     None, functools.partial(ops.move_to_trash, root.path, t))
                 results.append({"name": t.name, "status": "trashed", "id": tid})
+            await _drop_thumbs(root, t)
         except OSError as exc:
             log.info("filemanaty: delete failed for %s: %s", t.name, exc)
             results.append({"name": t.name, "status": "error", "message": str(exc)})
@@ -630,6 +661,9 @@ async def _rename(request: web.Request) -> web.Response:
     except OSError as exc:
         log.info("filemanaty: rename failed for %s -> %s: %s", src.name, target.name, exc)
         return _err("IO_ERROR", "rename failed", 409)
+    await _drop_thumbs(root, src)  # old path no longer exists
+    if status == "replace":        # the clobbered target's old bytes are gone
+        await _drop_thumbs(root, target)
     return _ok({"status": "done", "name": target.name})
 
 
@@ -709,6 +743,8 @@ async def _trash_restore(request: web.Request) -> web.Response:
             continue
         await loop.run_in_executor(
             None, functools.partial(ops.restore_from_trash, root.path, tid, target, replace=status == "replace"))
+        if status == "replace":
+            await _drop_thumbs(root, target)
         results.append({"id": tid, "status": "restored", "name": target.name})
     return _ok({"results": results})
 
@@ -822,6 +858,8 @@ async def _upload(request: web.Request) -> web.Response:
                 await loop.run_in_executor(
                     None, functools.partial(ops.rename, tmp, target, replace=status == "replace"))
                 committed = True
+                if status == "replace":
+                    await _drop_thumbs(root, target)
             except OSError as exc:
                 log.info("filemanaty: upload write failed for %s: %s", filename, exc)
                 return _err("IO_ERROR", "upload write failed", 409)
@@ -835,8 +873,20 @@ async def _upload(request: web.Request) -> web.Response:
     return _ok({"results": results})
 
 
+def _purge_legacy_cache() -> None:
+    """Drop flat ``<hash>.webp`` entries from the pre-mirror cache layout — it
+    couldn't map a deleted source file back to its thumbnail, so nothing there
+    was ever evictable."""
+    try:
+        for stale in _thumb_cache_dir().glob("*.webp"):
+            stale.unlink(missing_ok=True)
+    except OSError as exc:
+        log.warning("filemanaty: could not purge legacy thumb cache: %s", exc)
+
+
 def attach_routes(app: web.Application) -> None:
     """Attach all routes to the given aiohttp Application."""
+    _purge_legacy_cache()
     app.router.add_get(f"{API_PREFIX}/about", _about)
     app.router.add_get(f"{API_PREFIX}/roots", _roots)
     app.router.add_get(f"{API_PREFIX}/list", _list)

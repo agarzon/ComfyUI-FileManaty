@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from filemanaty.thumbs import generate_thumbnail, ThumbError, cache_key, cache_path, tmp_cache_path
+from filemanaty.thumbs import (
+    generate_thumbnail, ThumbError, cache_path, invalidate, prune, tmp_cache_path,
+)
 
 
 def _make_png(path: Path, size=(500, 300), color=(255, 0, 0)):
@@ -44,50 +46,133 @@ def test_generate_thumbnail_unsupported_extension_raises(tmp_path):
         generate_thumbnail(src, max_dimension=320)
 
 
-def test_cache_key_stable():
-    a = cache_key("outputs", "img.png", 12345, 320)
-    b = cache_key("outputs", "img.png", 12345, 320)
+def test_cache_path_stable(tmp_path):
+    a = cache_path(tmp_path, "outputs", "img.png", 12345, 320)
+    b = cache_path(tmp_path, "outputs", "img.png", 12345, 320)
+    assert a == b
+    assert a.suffix == ".webp"
+
+
+def test_cache_path_mirrors_source_layout(tmp_path):
+    p = cache_path(tmp_path, "outputs", "sub/deep/img.png", 12345, 320)
+    assert p.parent == tmp_path / "outputs" / "sub" / "deep"
+
+
+@pytest.mark.parametrize("other", [
+    ("outputs", "img.png", 99999, 320),   # mtime
+    ("outputs", "img.png", 12345, 256),   # max_dimension
+    ("inputs", "img.png", 12345, 320),    # root id
+    ("outputs", "other.png", 12345, 320), # name
+])
+def test_cache_path_differs(tmp_path, other):
+    base = cache_path(tmp_path, "outputs", "img.png", 12345, 320)
+    assert cache_path(tmp_path, *other) != base
+
+
+def test_cache_path_survives_very_long_names(tmp_path):
+    """Source names can approach the 255-byte limit; the cache entry adds
+    metadata to the name, so it hashes the leaf rather than reusing it."""
+    p = cache_path(tmp_path, "r", "a" * 250 + ".png", 1, 320)
+    assert len(p.name.encode()) < 255
+
+
+def test_cache_path_canonicalizes_dot_segments(tmp_path):
+    a = cache_path(tmp_path, "r", "sub/./img.png", 123, 320)
+    b = cache_path(tmp_path, "r", "sub/img.png", 123, 320)
     assert a == b
 
 
-def test_cache_key_changes_with_mtime():
-    a = cache_key("outputs", "img.png", 12345, 320)
-    b = cache_key("outputs", "img.png", 99999, 320)
-    assert a != b
+def test_invalidate_removes_all_variants_of_a_file(tmp_path):
+    for mtime in (1, 2):
+        p = cache_path(tmp_path, "r", "sub/img.png", mtime, 320)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"thumb")
+    keep = cache_path(tmp_path, "r", "sub/other.png", 1, 320)
+    keep.write_bytes(b"thumb")
+
+    invalidate(tmp_path, "r", "sub/img.png")
+
+    assert list(keep.parent.iterdir()) == [keep]
 
 
-def test_cache_key_changes_with_max_dimension():
-    a = cache_key("outputs", "img.png", 12345, 320)
-    b = cache_key("outputs", "img.png", 12345, 256)
-    assert a != b
+def test_invalidate_removes_a_whole_folder_subtree(tmp_path):
+    inner = cache_path(tmp_path, "r", "album/2024/img.png", 1, 320)
+    inner.parent.mkdir(parents=True, exist_ok=True)
+    inner.write_bytes(b"thumb")
+
+    invalidate(tmp_path, "r", "album")
+
+    assert not (tmp_path / "r" / "album").exists()
 
 
-def test_cache_key_changes_with_root_id():
-    a = cache_key("outputs", "img.png", 12345, 320)
-    b = cache_key("inputs", "img.png", 12345, 320)
-    assert a != b
+def test_invalidate_is_a_noop_for_an_uncached_path(tmp_path):
+    invalidate(tmp_path, "r", "never/cached.png")  # must not raise
 
 
-def test_cache_path_uses_webp_extension(tmp_path):
-    p = cache_path(tmp_path, "abc123")
-    assert p == tmp_path / "abc123.webp"
+def _seed(tmp_path, rel, mtime=1):
+    p = cache_path(tmp_path, "r", rel, mtime, 320)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"thumb")
+    return p
 
 
-def test_cache_key_canonicalizes_dot_segments():
-    a = cache_key("r", "sub/./img.png", 123, 320)
-    b = cache_key("r", "sub/img.png", 123, 320)
-    assert a == b
+def test_prune_drops_entries_whose_source_vanished(tmp_path):
+    """A file deleted outside FileManaty hits no eviction hook — prune is the
+    only thing that stops its thumbnail from living forever."""
+    gone = _seed(tmp_path, "pic.png")
+    alive = _seed(tmp_path, "keep.png", mtime=7)
+
+    prune(tmp_path, "r", "", {"keep.png": 7})
+
+    assert not gone.exists()
+    assert alive.exists()
+
+
+def test_prune_drops_entries_whose_source_was_overwritten(tmp_path):
+    """Same path, new mtime: the cached thumb holds the *previous* image."""
+    stale = _seed(tmp_path, "pic.png", mtime=1)
+
+    prune(tmp_path, "r", "", {"pic.png": 2})
+
+    assert not stale.exists()
+
+
+def test_prune_drops_mirror_dirs_for_deleted_folders(tmp_path):
+    _seed(tmp_path, "album/pic.png")
+    _seed(tmp_path, "kept/pic.png")
+
+    prune(tmp_path, "r", "", {"kept": 0})
+
+    assert not (tmp_path / "r" / "album").exists()
+    assert (tmp_path / "r" / "kept").is_dir()
+
+
+def test_prune_keeps_in_flight_temp_files(tmp_path):
+    """A concurrent writer's staged temp belongs to a live source — pruning it
+    mid-write would corrupt that request's atomic swap."""
+    final = cache_path(tmp_path, "r", "pic.png", 5, 320)
+    final.parent.mkdir(parents=True, exist_ok=True)
+    tmp = tmp_cache_path(final)
+    tmp.write_bytes(b"staging")
+
+    prune(tmp_path, "r", "", {"pic.png": 5})
+
+    assert tmp.exists()
+
+
+def test_prune_is_a_noop_without_a_mirror_dir(tmp_path):
+    prune(tmp_path, "r", "nothing/here", {})  # must not raise
 
 
 def test_tmp_cache_path_is_unique_per_call(tmp_path):
     """Two concurrent writers staging the same key must NOT share a temp path,
     otherwise their writes interleave and corrupt the file before .replace()."""
-    a = tmp_cache_path(tmp_path, "abc123")
-    b = tmp_cache_path(tmp_path, "abc123")
-    assert a != b
+    final = cache_path(tmp_path, "r", "img.png", 1, 320)
+    assert tmp_cache_path(final) != tmp_cache_path(final)
 
 
-def test_tmp_cache_path_lives_in_cache_dir_and_differs_from_final(tmp_path):
-    tmp = tmp_cache_path(tmp_path, "abc123")
-    assert tmp.parent == tmp_path
-    assert tmp != cache_path(tmp_path, "abc123")
+def test_tmp_cache_path_lives_beside_final_and_differs_from_it(tmp_path):
+    final = cache_path(tmp_path, "r", "img.png", 1, 320)
+    tmp = tmp_cache_path(final)
+    assert tmp.parent == final.parent
+    assert tmp != final

@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.10.1 — 2026-08-05
+
+### Fixed
+
+- **Thumbnails outlived the images they came from** ([#3](https://github.com/agarzon/ComfyUI-FileManaty/issues/3)).
+  Deleting a file — even emptying the trash afterwards — left its cached thumbnail on disk
+  forever, so a downscaled copy of removed images kept sitting in the cache. The cache was
+  write-only: entries were named after a hash of everything at once, which left no way to
+  map a deleted file back to its thumbnail.
+
+  The cache now **mirrors each root's folder layout**, and a thumbnail is evicted the moment
+  its source stops existing at that path — deleted (to trash *or* permanently), renamed,
+  moved, or overwritten by an upload, copy, move, or trash restore. Deleting a folder takes
+  its whole subtree of thumbnails with it. Changes made **outside** FileManaty (deleted or
+  overwritten on disk) are caught the next time you browse that folder.
+
+  On first start after upgrading, the old flat cache entries are deleted — nothing can read
+  them under the new layout, and they were exactly the ones that could never be evicted.
+  Thumbnails regenerate on demand, so the only cost is one rebuild.
+
+- **Overwritten images kept showing their old thumbnail** for up to an hour. Thumbnail URLs
+  now carry the file's mtime and size, so replacing a file refreshes the grid immediately
+  instead of waiting out the browser's cache.
+
 ## v0.10.0 — 2026-06-14
 
 ### Added

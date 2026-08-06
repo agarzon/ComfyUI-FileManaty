@@ -5,6 +5,7 @@ import hashlib
 import io
 import logging
 import secrets
+import shutil
 from pathlib import Path, PurePosixPath
 
 from PIL import Image, UnidentifiedImageError
@@ -42,19 +43,28 @@ def generate_thumbnail(src: Path, max_dimension: int) -> bytes:
         raise ThumbError(f"thumbnail failed: {exc}") from exc
 
 
-def cache_key(root_id: str, rel_path: str, mtime_ns: int, max_dimension: int) -> str:
-    """Stable key for an on-disk thumb cache entry (first 16 hex chars of sha256)."""
-    rel_path = PurePosixPath(rel_path).as_posix()
-    raw = f"{root_id}:{rel_path}:{mtime_ns}:{max_dimension}".encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()[:16]
+def _leaf_key(name: str) -> str:
+    """Hashed stand-in for a file name: keeps cache entries within the 255-byte
+    filename limit no matter how long the source name is."""
+    return hashlib.sha256(name.encode("utf-8")).hexdigest()[:16]
 
 
-def cache_path(cache_dir: Path, key: str) -> Path:
-    """Return the on-disk filename for a thumbnail with the given cache key."""
-    return cache_dir / f"{key}.webp"
+def cache_path(
+    cache_dir: Path, root_id: str, rel_path: str, mtime_ns: int, max_dimension: int
+) -> Path:
+    """On-disk path for a thumbnail, mirroring the source layout under ``root_id``.
+
+    Mirroring (rather than one flat hash of everything) is what makes
+    ``invalidate`` possible: a deleted source file or folder maps back to a
+    known place in the cache. mtime/max_dimension live in the filename so a
+    changed source is a cache miss, and all variants of one file share a prefix.
+    """
+    rel = PurePosixPath(rel_path)
+    return (cache_dir / root_id / rel.parent
+            / f"{_leaf_key(rel.name)}.{mtime_ns}.{max_dimension}.webp")
 
 
-def tmp_cache_path(cache_dir: Path, key: str) -> Path:
+def tmp_cache_path(final: Path) -> Path:
     """A unique temp path for staging a thumbnail before atomic .replace().
 
     The random suffix (not the PID) is what makes this unique: two concurrent
@@ -62,4 +72,41 @@ def tmp_cache_path(cache_dir: Path, key: str) -> Path:
     PID-based name would collide and the two writers would corrupt each other's
     bytes before the swap. The final .replace() is atomic regardless.
     """
-    return cache_dir / f"{key}.{secrets.token_hex(4)}.tmp"
+    return final.with_name(f"{final.name}.{secrets.token_hex(4)}.tmp")
+
+
+def invalidate(cache_dir: Path, root_id: str, rel_path: str) -> None:
+    """Drop every cached thumbnail for ``rel_path`` — a file, or a folder and
+    everything under it. Called whenever source bytes are deleted or replaced:
+    a thumbnail that outlives its source is a copy of data the user removed.
+    """
+    rel = PurePosixPath(rel_path)
+    base = cache_dir / root_id / rel
+    shutil.rmtree(base, ignore_errors=True)  # folder case; no-op for a file
+    for entry in base.parent.glob(f"{_leaf_key(rel.name)}.*"):  # every variant
+        entry.unlink(missing_ok=True)
+
+
+def prune(cache_dir: Path, root_id: str, rel_dir: str, live: dict[str, int]) -> None:
+    """Drop cache entries in one mirrored directory whose source no longer matches.
+
+    ``live`` maps every name currently in the source directory to its mtime_ns,
+    or 0 for a subdirectory. This is what catches changes FileManaty never saw:
+    a file deleted or overwritten on disk hits no eviction hook, so its thumbnail
+    would otherwise outlive it. Callers must pass a COMPLETE listing — a partial
+    one would read as "these sources are gone" and evict valid entries.
+    """
+    mirror = cache_dir / root_id / PurePosixPath(rel_dir)
+    if not mirror.is_dir():
+        return
+    # Entries are "<leaf_key>.<mtime_ns>.<max_dim>.webp"; subdirectories mirror
+    # source folder names verbatim.
+    by_leaf = {_leaf_key(name): str(mtime) for name, mtime in live.items()}
+    for entry in mirror.iterdir():
+        if entry.is_dir():
+            if entry.name not in live:
+                shutil.rmtree(entry, ignore_errors=True)
+            continue
+        leaf, _, rest = entry.name.partition(".")
+        if by_leaf.get(leaf) != rest.partition(".")[0]:
+            entry.unlink(missing_ok=True)

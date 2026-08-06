@@ -5,7 +5,9 @@ required — so this works in plain pytest.
 """
 from __future__ import annotations
 
+import io
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -261,6 +263,112 @@ async def test_thumbnail_cache_hit_returns_same_bytes(client_factory, tmp_root):
     body2 = await second.read()
     assert body1 == body2
     assert first.status == second.status == 200
+
+
+def _cached_thumbs() -> list[Path]:
+    return list(api_module._thumb_cache_dir().rglob("*.webp"))
+
+
+async def test_delete_evicts_cached_thumbnail(client_factory, tmp_root):
+    """Deleted image bytes must not survive in the thumb cache (privacy)."""
+    _make_image(tmp_root / "pic.png")
+    client = await client_factory()
+    assert (await client.get("/filemanaty/api/v1/thumbnail?root=t&path=pic.png")).status == 200
+    assert _cached_thumbs()
+    resp = await client.post("/filemanaty/api/v1/delete",
+                             json={"root": "t", "items": ["pic.png"], "permanent": True})
+    assert resp.status == 200
+    assert _cached_thumbs() == []
+
+
+async def test_trashing_evicts_cached_thumbnail(client_factory, tmp_root):
+    _make_image(tmp_root / "pic.png")
+    client = await client_factory()
+    await client.get("/filemanaty/api/v1/thumbnail?root=t&path=pic.png")
+    assert _cached_thumbs()
+    resp = await client.post("/filemanaty/api/v1/delete",
+                             json={"root": "t", "items": ["pic.png"]})
+    assert resp.status == 200
+    assert _cached_thumbs() == []
+
+
+async def test_delete_folder_evicts_cached_thumbnails_of_children(client_factory, tmp_root):
+    (tmp_root / "album").mkdir()
+    _make_image(tmp_root / "album" / "pic.png")
+    client = await client_factory()
+    await client.get("/filemanaty/api/v1/thumbnail?root=t&path=album/pic.png")
+    assert _cached_thumbs()
+    resp = await client.post("/filemanaty/api/v1/delete",
+                             json={"root": "t", "items": ["album"], "permanent": True})
+    assert resp.status == 200
+    assert _cached_thumbs() == []
+
+
+async def test_rename_evicts_cached_thumbnail(client_factory, tmp_root):
+    _make_image(tmp_root / "pic.png")
+    client = await client_factory()
+    await client.get("/filemanaty/api/v1/thumbnail?root=t&path=pic.png")
+    resp = await client.post("/filemanaty/api/v1/rename",
+                             json={"root": "t", "path": "pic.png", "name": "other.png"})
+    assert resp.status == 200
+    assert _cached_thumbs() == []
+
+
+async def test_move_evicts_cached_thumbnail_at_source(two_root_client, tmp_root, tmp_root2):
+    _make_image(tmp_root / "pic.png")
+    client = await two_root_client()
+    await client.get("/filemanaty/api/v1/thumbnail?root=t&path=pic.png")
+    resp = await client.post("/filemanaty/api/v1/move", json={
+        "src_root": "t", "src_items": ["pic.png"], "dst_root": "u", "dst_path": ""})
+    assert resp.status == 200
+    assert _cached_thumbs() == []
+
+
+async def test_list_evicts_thumbnail_of_a_file_deleted_out_of_band(client_factory, tmp_root):
+    """Deleting on disk bypasses every eviction hook; browsing the folder heals it."""
+    _make_image(tmp_root / "pic.png")
+    client = await client_factory()
+    await client.get("/filemanaty/api/v1/thumbnail?root=t&path=pic.png")
+    assert _cached_thumbs()
+
+    (tmp_root / "pic.png").unlink()
+    resp = await client.get("/filemanaty/api/v1/list?root=t&path=")
+
+    assert resp.status == 200
+    assert _cached_thumbs() == []
+
+
+async def test_list_evicts_thumbnail_of_a_file_overwritten_out_of_band(client_factory, tmp_root):
+    """The stale entry holds the previous image — same path, older mtime."""
+    _make_image(tmp_root / "pic.png")
+    client = await client_factory()
+    await client.get("/filemanaty/api/v1/thumbnail?root=t&path=pic.png")
+    stale = _cached_thumbs()
+    assert stale
+
+    _make_image(tmp_root / "pic.png", size=(40, 30))
+    os.utime(tmp_root / "pic.png", ns=(10**18, 10**18))
+    resp = await client.get("/filemanaty/api/v1/list?root=t&path=")
+
+    assert resp.status == 200
+    assert set(_cached_thumbs()).isdisjoint(stale)
+
+
+async def test_upload_replace_evicts_cached_thumbnail(client_factory, tmp_root):
+    """Overwriting an image must drop the thumbnail of the bytes it replaced."""
+    _make_image(tmp_root / "pic.png")
+    client = await client_factory()
+    await client.get("/filemanaty/api/v1/thumbnail?root=t&path=pic.png")
+    before = _cached_thumbs()
+    buf = io.BytesIO()
+    Image.new("RGB", (60, 40), (1, 2, 3)).save(buf, format="PNG")
+    data = FormData()
+    data.add_field("root", "t")
+    data.add_field("path", "")
+    data.add_field("file", buf.getvalue(), filename="pic.png", content_type="image/png")
+    resp = await client.post("/filemanaty/api/v1/upload?on_conflict=replace", data=data)
+    assert resp.status == 200
+    assert set(_cached_thumbs()).isdisjoint(before)
 
 
 async def test_thumbnail_corrupt_image_returns_404(client_factory, tmp_root):
