@@ -352,7 +352,9 @@ async function initOverlay() {
     gridEl.addEventListener("dragleave", () => { gridEl.style.outline = "none"; });
     gridEl.addEventListener("drop", (e) => {
         gridEl.style.outline = "none";
-        if (e.dataTransfer && e.dataTransfer.files.length) {
+        // Same guard as dragover: `types` is the reliable signal for a file drop,
+        // `files` is the flat view that misses the folders walkDrop is here for.
+        if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) {
             e.preventDefault();
             // walkDrop claims the item list synchronously — do not await first
             walkDrop(e.dataTransfer).then(uploadTree).catch((x) => toast(x.message, "error"));
@@ -472,17 +474,17 @@ async function uploadTree(entries) {
     }
     const bar = progressBar(entries.length);
     let policy = null;   // set once the user ticks "do this for all conflicts"
-    let done = 0, failed = 0;
+    let done = 0, failed = 0, cancelled = false;
     try {
         for (const { file, dir } of entries) {
-            bar.set(done, file.name);
+            bar.set(done + 1, file.name);   // 1-based: the file in flight, and it reaches total
             const path = joinPath(STATE.currentPath, dir);
             try {
                 await apiUpload(STATE.currentRoot, path, [file], policy);
             } catch (e) {
                 if (e.status !== 409) { failed++; done++; continue; }
                 const choice = await conflictDialog(e.conflicts || [file.name]);
-                if (!choice) break;                       // cancelled — stop the queue
+                if (!choice) { cancelled = true; break; }  // stop the queue
                 if (choice.all) policy = choice.policy;
                 try { await apiUpload(STATE.currentRoot, path, [file], choice.policy); }
                 catch { failed++; }
@@ -494,6 +496,7 @@ async function uploadTree(entries) {
     }
     await refresh();
     if (failed) toast(`${failed} of ${entries.length} upload(s) failed`, "error");
+    else if (cancelled) toast(`Cancelled — ${done} of ${entries.length} file(s) uploaded`);
     else toast(`Uploaded ${done} file(s)`, "success");
 }
 
