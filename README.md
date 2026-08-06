@@ -144,7 +144,7 @@ docker compose -f docker/docker-compose.yml up -d   # ComfyUI at http://localhos
 ```
 The repo is bind-mounted into the container's `custom_nodes/`. Edit on the host, then restart the container for Python changes and hard-reload the browser for JavaScript changes. Pin a ComfyUI version with `--build-arg COMFYUI_REF=v0.3.27` on `docker compose build`.
 
-Thumbnails are cached as WebP under `<ComfyUI user dir>/filemanaty/thumbs/` — safe to delete at any time; they regenerate on demand and survive ComfyUI updates.
+Thumbnails are cached as WebP under `<ComfyUI user dir>/filemanaty/thumbs/`, mirroring each root's folder layout — safe to delete at any time; they regenerate on demand and survive ComfyUI updates. A cached thumbnail is dropped as soon as its source file is deleted, moved, renamed, or overwritten, so no thumbnail outlives the image it came from. Changes made outside FileManaty are caught the next time you browse the folder.
 
 ## 📄 License
 

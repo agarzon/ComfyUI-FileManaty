@@ -568,7 +568,7 @@ function renderGrid() {
         if (e.kind === "image" && showThumbs) {
             const img = document.createElement("img");
             img.loading = "lazy";
-            img.src = thumbnailURL(STATE.currentRoot, childPath);
+            img.src = thumbnailURL(STATE.currentRoot, childPath, e.mtime, e.size);
             img.style.cssText = "width:100%;height:100%;object-fit:cover;";
             img.onerror = () => { img.replaceWith(makeIcon("image")); };
             cell.appendChild(img);

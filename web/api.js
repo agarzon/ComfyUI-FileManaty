@@ -35,8 +35,12 @@ export async function fetchList(rootId, relPath, { includeHidden = false } = {})
     return getJSON(`${BASE}/list?${q.toString()}`);
 }
 
-export function thumbnailURL(rootId, relPath) {
-    const q = new URLSearchParams({ root: rootId, path: relPath });
+// `v` is a cache-buster, ignored by the server. /thumbnail answers with
+// max-age=3600, so without it an overwritten file keeps rendering its old
+// thumbnail for up to an hour. Size joins mtime because /list reports mtime
+// in whole seconds — two writes inside one second would share a URL otherwise.
+export function thumbnailURL(rootId, relPath, mtime, size) {
+    const q = new URLSearchParams({ root: rootId, path: relPath, v: `${mtime}.${size}` });
     return `${BASE}/thumbnail?${q.toString()}`;
 }
 
