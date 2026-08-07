@@ -9,7 +9,7 @@
   action-bar button and the overlay header was drawn independently of the illustrated mascot on
   the Registry icon and banner — it faced the other way and, at 18px, read as a shapeless blob.
   Redrawn from the mascot: same pose, blunt muzzle, eye, two flippers, broad paddle tail. Still a
-  single-color path, so it keeps inheriting the ComfyUI theme color and the hover-to-accent tint.
+  single-color mark, so it keeps inheriting the ComfyUI theme color and the hover-to-accent tint.
 
 - **The README hero now shows the real app.** `assets/screenshot.jpg` carried a mocked-up UI with
   garbled labels, plus the old mark in both the hero and the fake app header. The tablet now holds
