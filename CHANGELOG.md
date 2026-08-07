@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.12.1 — 2026-08-06
+
+### Changed
+
+- **The in-app manatee mark now matches the mascot**
+  ([#6](https://github.com/agarzon/ComfyUI-FileManaty/issues/6)). The flat silhouette used by the
+  action-bar button and the overlay header was drawn independently of the illustrated mascot on
+  the Registry icon and banner — it faced the other way and, at 18px, read as a shapeless blob.
+  Redrawn from the mascot: same pose, blunt muzzle, eye, two flippers, broad paddle tail. Still a
+  single-color path, so it keeps inheriting the ComfyUI theme color and the hover-to-accent tint.
+
 ## v0.12.0 — 2026-08-05
 
 ### Added
