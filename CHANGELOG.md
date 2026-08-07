@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.12.1 — 2026-08-07
+
+### Changed
+
+- **Unified visual identity** ([#6](https://github.com/agarzon/ComfyUI-FileManaty/issues/6)). The
+  in-app manatee mark faced the other way from the mascot on the Registry icon and banner, and read
+  as a blob at 18px. Redrawn to match — still a single-color mark, so it keeps inheriting the
+  ComfyUI theme color.
+
+- **New README hero.** Rebuilt on the mascot's teal palette instead of the old violet art, and the
+  laptop now shows a real capture of the running app rather than a mocked-up UI with garbled
+  labels. 2.0 MB → 277 KB.
+
 ## v0.12.0 — 2026-08-05
 
 ### Added
