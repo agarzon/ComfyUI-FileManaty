@@ -1,20 +1,17 @@
 # Changelog
 
-## v0.12.1 — 2026-08-06
+## v0.12.1 — 2026-08-07
 
 ### Changed
 
-- **The in-app manatee mark now matches the mascot**
-  ([#6](https://github.com/agarzon/ComfyUI-FileManaty/issues/6)). The flat silhouette used by the
-  action-bar button and the overlay header was drawn independently of the illustrated mascot on
-  the Registry icon and banner — it faced the other way and, at 18px, read as a shapeless blob.
-  Redrawn from the mascot: same pose, blunt muzzle, eye, two flippers, broad paddle tail. Still a
-  single-color mark, so it keeps inheriting the ComfyUI theme color and the hover-to-accent tint.
+- **Unified visual identity** ([#6](https://github.com/agarzon/ComfyUI-FileManaty/issues/6)). The
+  in-app manatee mark faced the other way from the mascot on the Registry icon and banner, and read
+  as a blob at 18px. Redrawn to match — still a single-color mark, so it keeps inheriting the
+  ComfyUI theme color.
 
-- **The README hero now shows the real app.** `assets/screenshot.jpg` carried a mocked-up UI with
-  garbled labels, plus the old mark in both the hero and the fake app header. The tablet now holds
-  an actual capture of the running extension — real tree, real toolbar, real preview pane with
-  PNG metadata — and the hero mark was replaced with the redrawn one. Also 2.0 MB → 439 KB.
+- **New README hero.** Rebuilt on the mascot's teal palette instead of the old violet art, and the
+  laptop now shows a real capture of the running app rather than a mocked-up UI with garbled
+  labels. 2.0 MB → 277 KB.
 
 ## v0.12.0 — 2026-08-05
 
