@@ -96,7 +96,7 @@ def test_video_extension_missing_dot_falls_back(tmp_path, caplog):
     with caplog.at_level("ERROR", logger="filemanaty"):
         cfg = load_config(config_file, output_dir, output_dir)
     # bad ext -> _ConfigError -> falls back to defaults (like image_extensions)
-    assert cfg.files.video_extensions == (".mp4", ".webm")
+    assert cfg.files.video_extensions == (".mp4", ".webm", ".mkv", ".mov")
 
 
 def test_roots_are_writable_by_default(tmp_path):

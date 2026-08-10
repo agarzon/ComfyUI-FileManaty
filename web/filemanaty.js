@@ -603,12 +603,12 @@ function renderGrid() {
         cell.dataset.name = e.name;
         cell.style.cssText = "position:relative;background:var(--fm-bg);border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;";
         const childPath = STATE.currentPath ? `${STATE.currentPath}/${e.name}` : e.name;
-        if (e.kind === "image" && showThumbs) {
+        if ((e.kind === "image" || e.kind === "video") && showThumbs) {
             const img = document.createElement("img");
             img.loading = "lazy";
             img.src = thumbnailURL(STATE.currentRoot, childPath, e.mtime, e.size);
             img.style.cssText = "width:100%;height:100%;object-fit:cover;";
-            img.onerror = () => { img.replaceWith(makeIcon("image")); };
+            img.onerror = () => { img.replaceWith(makeIcon(e.kind)); };
             cell.appendChild(img);
         } else if (e.kind === "folder") {
             cell.appendChild(makeIcon("folder"));
@@ -817,6 +817,17 @@ function renderPreview() {
             <div id="fm-meta" style="color:var(--fm-text-muted);font-size:12px;">Loading metadata…</div>
         `;
         loadMetadata(STATE.currentRoot, childPath);
+        // A container the browser can't decode (Matroska in Firefox, ProRes in a
+        // .mov) otherwise leaves a silent blank player. The same event also fires
+        // on network/decode failures, so the message covers both: whatever went
+        // wrong, the file itself is still downloadable.
+        const player = document.getElementById("fm-media");
+        player.onerror = () => {
+            const msg = document.createElement("div");
+            msg.textContent = "Can't play this video in the browser — download it to view.";
+            msg.style.cssText = "color:var(--fm-text-muted);font-size:12px;text-align:center;padding:12px;";
+            player.replaceWith(msg);
+        };
     } else if (sel.kind === "audio") {
         el.innerHTML = `
             <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--fm-bg);border-radius:4px;min-height:0;gap:16px;">

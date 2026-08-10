@@ -289,8 +289,10 @@ async def _thumbnail(request: web.Request) -> web.Response:
     if (resp := _reject_hidden(target, root.path)) is not None:
         return resp
 
-    if target.suffix.lower() not in cfg.files.image_extensions:
-        return _err("THUMB_UNSUPPORTED", "not an image extension", 404)
+    suffix = target.suffix.lower()
+    is_video = suffix in cfg.files.video_extensions
+    if not is_video and suffix not in cfg.files.image_extensions:
+        return _err("THUMB_UNSUPPORTED", "not an image or video extension", 404)
 
     mtime_ns = target.stat().st_mtime_ns
     out_path = cache_path(
@@ -313,7 +315,7 @@ async def _thumbnail(request: web.Request) -> web.Response:
 
     try:
         data = await loop.run_in_executor(
-            None, generate_thumbnail, target, cfg.thumbnails.max_dimension
+            None, generate_thumbnail, target, cfg.thumbnails.max_dimension, is_video
         )
     except ThumbError as exc:
         log.info("filemanaty: thumb generation failed for %s: %s", target.name, exc)
