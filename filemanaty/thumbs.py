@@ -1,4 +1,4 @@
-"""Image thumbnail generation + on-disk WebP cache."""
+"""Image/video thumbnail generation + on-disk WebP cache."""
 from __future__ import annotations
 
 import hashlib
@@ -12,18 +12,47 @@ from PIL import Image, UnidentifiedImageError
 
 log = logging.getLogger("filemanaty")
 
+# Where in a clip to grab the thumbnail frame, as a fraction of its duration.
+# Midpoint, not frame 0: intros fade in from black, so frame 0 is often a
+# featureless rectangle.
+# ponytail: fixed constant. Promote to `thumbnails.*` in config.json if anyone
+# actually wants to tune it — the value would then have to join the cache-path
+# filename, or changed settings would keep serving old frames.
+VIDEO_FRAME_POSITION = 0.5
+
 
 class ThumbError(Exception):
     """Raised when a thumbnail cannot be generated."""
 
 
-def generate_thumbnail(src: Path, max_dimension: int) -> bytes:
+def _video_frame(src: Path) -> Image.Image:
+    """Decode one frame near ``VIDEO_FRAME_POSITION`` of ``src`` as a PIL image."""
+    import av  # lazy: ComfyUI-core dep, may be absent in some installs
+
+    with av.open(str(src)) as container:
+        stream = container.streams.video[0]
+        stream.thread_type = "AUTO"
+        if container.duration:  # None on some streamed containers
+            try:
+                # `duration` is already in AV_TIME_BASE units, which is what the
+                # container-level seek expects. Seeks land on the keyframe at or
+                # before the target, so decoding from there yields a real frame.
+                container.seek(int(container.duration * VIDEO_FRAME_POSITION))
+            except Exception as exc:  # noqa: BLE001 - unseekable: settle for frame 0
+                log.debug("filemanaty: seek failed for %s: %s", src.name, exc)
+        for frame in container.decode(stream):
+            return frame.to_image()
+    raise ThumbError("no decodable video frames")
+
+
+def generate_thumbnail(src: Path, max_dimension: int, video: bool = False) -> bytes:
     """Generate a WebP thumbnail for ``src``, return raw bytes.
 
+    ``video`` picks the decoder: a mid-clip frame via PyAV instead of Pillow.
     Raises ``ThumbError`` on any failure (unsupported, corrupt, oversize).
     """
     try:
-        with Image.open(src) as img:
+        with (_video_frame(src) if video else Image.open(src)) as img:
             img.load()
             # Normalize odd modes (P, L, etc.) to RGB so Pillow can encode WebP.
             # RGB and RGBA are passed through; WebP supports both.

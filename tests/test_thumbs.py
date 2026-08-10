@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import sys
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,88 @@ def test_generate_thumbnail_unsupported_extension_raises(tmp_path):
     src.write_bytes(b"MZ\x90\x00\x03\x00\x00\x00\x04\x00")
     with pytest.raises(ThumbError):
         generate_thumbnail(src, max_dimension=320)
+
+
+# --- video thumbnails -------------------------------------------------------
+# PyAV is a ComfyUI-core dep, not a test dep, so `av` is faked here exactly as
+# tests/test_metadata.py does. What's worth checking is ours, not FFmpeg's: the
+# seek lands mid-clip, and an unseekable container still yields a thumbnail.
+
+class _FakeFrame:
+    def __init__(self, color):
+        self._img = Image.new("RGB", (640, 480), color)
+
+    def to_image(self):
+        return self._img
+
+
+class _FakeStream:
+    thread_type = None
+
+
+class _FakeVideoContainer:
+    def __init__(self, duration, seek_error=None):
+        self.duration = duration
+        self.streams = type("S", (), {"video": [_FakeStream()]})()
+        self.seeks = []
+        self._seek_error = seek_error
+
+    def seek(self, offset):
+        if self._seek_error is not None:
+            raise self._seek_error
+        self.seeks.append(offset)
+
+    def decode(self, _stream):
+        # Black before a seek, red after — mirrors a clip that fades in.
+        yield _FakeFrame((200, 0, 0) if self.seeks else (0, 0, 0))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class _FakeAv:
+    def __init__(self, container):
+        self.container = container
+
+    def open(self, _path):
+        return self.container
+
+
+def _install_fake_av(monkeypatch, container):
+    monkeypatch.setitem(sys.modules, "av", _FakeAv(container))
+    return container
+
+
+def test_generate_thumbnail_video_seeks_to_midpoint(monkeypatch, tmp_path):
+    container = _install_fake_av(monkeypatch, _FakeVideoContainer(duration=10_000_000))
+
+    data = generate_thumbnail(tmp_path / "clip.mp4", max_dimension=320, video=True)
+
+    assert container.seeks == [5_000_000]  # AV_TIME_BASE units, half of duration
+    assert data[8:12] == b"WEBP"
+    out = Image.open(io.BytesIO(data))
+    assert out.size == (320, 240)
+    assert out.convert("RGB").getpixel((0, 0))[0] > 100  # post-seek frame, not frame 0
+
+
+def test_generate_thumbnail_video_unseekable_falls_back_to_first_frame(
+        monkeypatch, tmp_path):
+    # An unseekable container must still produce a thumbnail, not an error page.
+    _install_fake_av(monkeypatch, _FakeVideoContainer(
+        duration=10_000_000, seek_error=OSError("cannot seek")))
+
+    data = generate_thumbnail(tmp_path / "stream.webm", max_dimension=64, video=True)
+
+    assert data[8:12] == b"WEBP"
+
+
+def test_generate_thumbnail_video_missing_pyav_raises(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "av", None)  # forces ImportError on `import av`
+    with pytest.raises(ThumbError):
+        generate_thumbnail(tmp_path / "clip.mp4", max_dimension=320, video=True)
 
 
 def test_cache_path_stable(tmp_path):

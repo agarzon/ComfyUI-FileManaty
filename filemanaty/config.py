@@ -24,7 +24,11 @@ DEFAULT_IMAGE_EXTS: tuple[str, ...] = (
     ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif",
 )
 # Browser-playable containers only — others fall back to icon + download.
-DEFAULT_VIDEO_EXTS: tuple[str, ...] = (".mp4", ".webm")
+# .mkv/.mov join the browser-native pair because VideoHelperSuite writes them and
+# metadata.py already reads workflows out of them. Thumbnails are decoded server
+# side so they always work; inline playback depends on the browser (Chromium plays
+# H.264/AAC in any of these containers, Firefox has no Matroska support).
+DEFAULT_VIDEO_EXTS: tuple[str, ...] = (".mp4", ".webm", ".mkv", ".mov")
 DEFAULT_AUDIO_EXTS: tuple[str, ...] = (".mp3", ".wav", ".ogg", ".m4a", ".flac")
 
 

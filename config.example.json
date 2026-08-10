@@ -14,7 +14,7 @@
   ],
   "files": {
     "image_extensions": [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif"],
-    "video_extensions": [".mp4", ".webm"],
+    "video_extensions": [".mp4", ".webm", ".mkv", ".mov"],
     "audio_extensions": [".mp3", ".wav", ".ogg", ".m4a", ".flac"]
   },
   "thumbnails": {

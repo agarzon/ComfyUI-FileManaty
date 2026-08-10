@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.13.0 — 2026-08-10
+
+### Added
+
+- **Video thumbnails.** Video files showed a 🎬 icon in the grid; they now get a real thumbnail,
+  decoded from the middle of the clip (frame 0 is usually a black fade-in). Same WebP cache,
+  eviction, and **View → Show Thumbnails** toggle as images — nothing new to configure. Frames are
+  decoded with PyAV, a ComfyUI core dependency; installs without it keep the icon.
+
+- **`.mkv` and `.mov` count as video by default.** VideoHelperSuite writes both, and FileManaty
+  already read embedded workflows out of them — but they showed as anonymous 📄 files with no
+  thumbnail and no preview unless you hand-wrote `files.video_extensions`. Thumbnails are decoded
+  server-side, so they work regardless of browser; inline playback depends on the container support
+  of the browser you're using.
+
+- **Unplayable videos say so.** A container the browser can't decode (Matroska in Firefox, ProRes
+  in a `.mov`) used to leave a silent blank player. The preview pane now falls back to a
+  "download it to view" message.
+
+### Fixed
+
+- **README: `roots[]` documentation.** The config table listed `roots[]` as optional with an
+  auto-mount default. Auto-mounting only applies when there is **no** `config.json` — a config
+  file that omits `roots` logs a warning and leaves the UI empty.
+
 ## v0.12.1 — 2026-08-07
 
 ### Changed

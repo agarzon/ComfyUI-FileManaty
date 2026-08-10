@@ -239,6 +239,29 @@ async def test_thumbnail_returns_webp(client_factory, tmp_root):
     assert body[:4] == b"RIFF" and body[8:12] == b"WEBP"
 
 
+async def test_thumbnail_video_extension_reaches_the_decoder(
+        client_factory, tmp_root, monkeypatch):
+    """A video extension passes the gate and is decoded with video=True.
+
+    PyAV isn't a test dep, so the decoder is stubbed — what's under test is the
+    route's extension gate, which otherwise looks identical to the old
+    image-only behaviour (both end in THUMB_UNSUPPORTED without PyAV present).
+    """
+    (tmp_root / "clip.mp4").write_bytes(b"not really an mp4")
+    calls = []
+
+    def _fake_generate(src, max_dimension, video=False):
+        calls.append(video)
+        return b"RIFF\0\0\0\0WEBPstub"
+
+    monkeypatch.setattr("filemanaty.api.generate_thumbnail", _fake_generate)
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/thumbnail?root=t&path=clip.mp4")
+    assert resp.status == 200
+    assert resp.headers["Content-Type"] == "image/webp"
+    assert calls == [True]
+
+
 async def test_thumbnail_unsupported_extension_returns_404(client_factory, tmp_root):
     (tmp_root / "doc.txt").write_text("hi")
     client = await client_factory()

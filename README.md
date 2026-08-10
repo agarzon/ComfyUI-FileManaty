@@ -64,7 +64,7 @@ Open **ComfyUI Settings → 🦭 FileManaty**. These are per-browser display cho
 | Setting | What it does |
 |---|---|
 | **View → Allow Hidden** | Show dotfiles in listings |
-| **View → Show Thumbnails** | Toggle image thumbnails |
+| **View → Show Thumbnails** | Toggle image and video thumbnails |
 | **View → Grid Density** | Compact / Normal / Comfortable |
 | **View → Thumbnail Size** | Small / Medium / Large |
 | **Sort → Field / Order** | Sort by name, size, date, or type — ascending or descending |
@@ -77,13 +77,13 @@ For security and capacity limits the server is the authority. Drop a `config.jso
 
 | Field | Required | Default | Notes |
 |---|---|---|---|
-| `roots[]` | no | auto-mount `output/` + `input/` | The browsable roots |
+| `roots[]` | yes, once a `config.json` exists | auto-mount `output/` + `input/` + workflows | The browsable roots. Auto-mounting applies **only when there is no config file** — a `config.json` that omits `roots` logs a warning and leaves the UI empty |
 | `roots[].id` | yes | — | Matches `^[a-z0-9_-]{1,32}$`, unique |
 | `roots[].label` | yes | — | Display name shown in the UI |
 | `roots[].path` | yes | — | **Absolute** path; must exist and be a directory |
 | `roots[].writable` | no | `true` | Set `false` for a browse-only root |
 | `files.image_extensions` | no | png, jpg, jpeg, webp, gif, bmp, avif | Previewed inline + get thumbnails |
-| `files.video_extensions` | no | mp4, webm | Played inline (HTML5 video) |
+| `files.video_extensions` | no | mp4, webm, mkv, mov | Get thumbnails (decoded server-side) + played inline where the browser supports the container |
 | `files.audio_extensions` | no | mp3, wav, ogg, m4a, flac | Played inline (HTML5 audio) |
 | `thumbnails.max_dimension` | no | `320` | Longest side, `64`–`1024` |
 | `write.max_upload_mb` | no | `1024` | Max size per uploaded file, `1`–`1048576` |
