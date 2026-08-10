@@ -818,12 +818,13 @@ function renderPreview() {
         `;
         loadMetadata(STATE.currentRoot, childPath);
         // A container the browser can't decode (Matroska in Firefox, ProRes in a
-        // .mov) otherwise leaves a silent blank player. Say so; the thumbnail is
-        // decoded server-side and the file is still downloadable.
+        // .mov) otherwise leaves a silent blank player. The same event also fires
+        // on network/decode failures, so the message covers both: whatever went
+        // wrong, the file itself is still downloadable.
         const player = document.getElementById("fm-media");
         player.onerror = () => {
             const msg = document.createElement("div");
-            msg.textContent = "Can't play this format in this browser — download it to view.";
+            msg.textContent = "Can't play this video in the browser — download it to view.";
             msg.style.cssText = "color:var(--fm-text-muted);font-size:12px;text-align:center;padding:12px;";
             player.replaceWith(msg);
         };

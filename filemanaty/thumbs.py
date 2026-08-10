@@ -15,9 +15,10 @@ log = logging.getLogger("filemanaty")
 # Where in a clip to grab the thumbnail frame, as a fraction of its duration.
 # Midpoint, not frame 0: intros fade in from black, so frame 0 is often a
 # featureless rectangle.
-# ponytail: fixed constant. Promote to `thumbnails.*` in config.json if anyone
-# actually wants to tune it — the value would then have to join the cache-path
-# filename, or changed settings would keep serving old frames.
+#
+# Deliberately a constant rather than a config key. To make it tunable it would
+# also have to join the cache-path filename — otherwise changing it would keep
+# serving thumbnails generated at the old position.
 VIDEO_FRAME_POSITION = 0.5
 
 
@@ -63,7 +64,10 @@ def generate_thumbnail(src: Path, max_dimension: int, video: bool = False) -> by
             img.save(buf, format="WEBP", quality=80)
             return buf.getvalue()
     except (UnidentifiedImageError, OSError) as exc:
-        raise ThumbError(f"cannot read image: {exc}") from exc
+        # PyAV raises OSError subclasses too, so name the kind we actually tried
+        # to decode — "cannot read image" on an .mp4 sends log readers hunting
+        # for a corrupt PNG.
+        raise ThumbError(f"cannot read {'video' if video else 'image'}: {exc}") from exc
     except Exception as exc:
         # Pillow can raise DecompressionBombError, struct.error, zlib errors,
         # and other internal types on malformed input. Catch broadly; if a
