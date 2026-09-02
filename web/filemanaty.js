@@ -110,6 +110,19 @@ function resetFilter() {
     if (tf) tf.value = "all";
 }
 
+// Point the toolbar controls at the current sort settings. Called on init and
+// from the settings subscribers, so changing sort in ComfyUI Settings moves the
+// toolbar too.
+function syncSortControls() {
+    const field = document.getElementById("fm-sort-field");
+    const order = document.getElementById("fm-sort-order");
+    if (!field || !order) return;
+    field.value = settings.get(SETTINGS_KEYS.SORT_FIELD);
+    const desc = settings.get(SETTINGS_KEYS.SORT_ORDER) === "desc";
+    order.textContent = desc ? "↓" : "↑";
+    order.title = desc ? "Descending — click for ascending" : "Ascending — click for descending";
+}
+
 export const STATE = {
     overlay: null,
     open: false,
@@ -184,6 +197,13 @@ function buildOverlay() {
                 <option value="other">Other</option>
             </select>
             <span id="fm-filtercount" style="opacity:.7;margin-left:2px"></span>
+            <select id="fm-sort-field" class="fm-search" title="Sort by">
+                <option value="name">Name</option>
+                <option value="mtime">Date</option>
+                <option value="size">Size</option>
+                <option value="type">Type</option>
+            </select>
+            <button id="fm-sort-order" class="fm-tb" title="Sort direction"></button>
             <span style="flex:1"></span>
             <span id="fm-selcount" style="opacity:.7;margin-right:6px"></span>
             <button class="fm-tb" data-act="newfolder">＋ New Folder</button>
@@ -328,6 +348,23 @@ async function initOverlay() {
     };
     searchInput.addEventListener("input", applyFilter);
     typeFilter.addEventListener("change", applyFilter);
+    // Writing the setting is what persists the choice as the new default; the
+    // sync+rerender here is explicit rather than left to the subscriber, which
+    // only fires if ComfyUI's store reports the programmatic write.
+    const setSort = (key, value) => {
+        settings.set(key, value);
+        syncSortControls();
+        rerender();
+    };
+    document.getElementById("fm-sort-field").addEventListener("change", (e) => {
+        setSort(SETTINGS_KEYS.SORT_FIELD, e.target.value);
+    });
+    document.getElementById("fm-sort-order").addEventListener("click", () => {
+        const next = settings.get(SETTINGS_KEYS.SORT_ORDER) === "desc" ? "asc" : "desc";
+        setSort(SETTINGS_KEYS.SORT_ORDER, next);
+    });
+    syncSortControls();
+
     document.getElementById("fm-search-clear").addEventListener("click", () => {
         resetFilter();
         rerender();
@@ -384,8 +421,8 @@ async function initOverlay() {
     settings.subscribe(SETTINGS_KEYS.SHOW_THUMBNAILS, rerender);
     settings.subscribe(SETTINGS_KEYS.GRID_DENSITY, rerender);
     settings.subscribe(SETTINGS_KEYS.THUMBNAIL_SIZE, rerender);
-    settings.subscribe(SETTINGS_KEYS.SORT_FIELD, rerender);
-    settings.subscribe(SETTINGS_KEYS.SORT_ORDER, rerender);
+    settings.subscribe(SETTINGS_KEYS.SORT_FIELD, () => { syncSortControls(); rerender(); });
+    settings.subscribe(SETTINGS_KEYS.SORT_ORDER, () => { syncSortControls(); rerender(); });
     settings.subscribe(SETTINGS_KEYS.SORT_FOLDERS_FIRST, rerender);
     renderTabs(roots);
     if (roots.length > 0) {

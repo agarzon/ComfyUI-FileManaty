@@ -52,7 +52,7 @@ Restart ComfyUI.
 2. Click the **🦭 FileManaty** button in the top action bar — or press **`Ctrl+Shift+F`**.
 3. With no config file present, FileManaty auto-mounts ComfyUI's **`output/`**, **`input/`**, and **`workflows`** folders as your browsable roots. Start browsing!
 
-Pick a file to preview it on the right; double-click a folder to enter it. Select one or many files (click / `Ctrl`-click / `Shift`-click / `Ctrl+A`), then use the toolbar or right-click menu to manage them.
+Pick a file to preview it on the right; double-click a folder to enter it. Sort the grid from the toolbar — pick a field and flip the direction with the arrow. Select one or many files (click / `Ctrl`-click / `Shift`-click / `Ctrl+A`), then use the toolbar or right-click menu to manage them.
 
 ## ⚙️ Configuration
 
@@ -67,7 +67,7 @@ Open **ComfyUI Settings → 🦭 FileManaty**. These are per-browser display cho
 | **View → Show Thumbnails** | Toggle image and video thumbnails |
 | **View → Grid Density** | Compact / Normal / Comfortable |
 | **View → Thumbnail Size** | Small / Medium / Large |
-| **Sort → Field / Order** | Sort by name, size, date, or type — ascending or descending |
+| **Sort → Field / Order** | Sort by name, size, date, or type — ascending or descending (also in the panel toolbar) |
 | **Sort → Folders First** | Keep folders above files |
 | **Open → Default Root** | Which root opens first (or "Last used") |
 | **Confirm → On Delete / On Shift-Delete** | Confirmation dialogs for trashing / permanent delete |
