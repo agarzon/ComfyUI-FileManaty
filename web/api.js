@@ -130,7 +130,15 @@ export function uploadFiles(root, path, files, onConflict, onProgress) {
             }
             resolve(data.data);
         };
-        xhr.onerror = () => reject(new Error("upload failed"));
+        // A transport failure has no envelope to read a code out of, but the
+        // fields callers branch on still have to be there.
+        xhr.onerror = () => {
+            const err = new Error("upload failed");
+            err.code = undefined;
+            err.status = xhr.status;   // 0 when the request never reached the server
+            err.conflicts = [];
+            reject(err);
+        };
         xhr.onabort = () => { const e = new Error("cancelled"); e.cancelled = true; reject(e); };
         xhr.send(form);
     });

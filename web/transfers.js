@@ -103,8 +103,11 @@ export function transferTray(items, onAbortActive) {
     function render() {
         const sent = sentTotal();
         barEl.value = sent;
-        const doneCount = rows.filter((r) => r.status !== "queued" && r.status !== "active").length;
-        titleEl.textContent = `Uploading ${Math.min(doneCount + 1, rows.length)} of ${rows.length}`;
+        // The row in flight names the position; cancelling something further down
+        // the queue must not advance the count of the upload still running.
+        const settled = rows.filter((r) => r.status !== "queued" && r.status !== "active").length;
+        const at = active >= 0 ? active + 1 : Math.min(settled + 1, rows.length);
+        titleEl.textContent = `Uploading ${at} of ${rows.length}`;
 
         // A retry rewinds the total; samples taken before it would read as a
         // negative rate, so they are dropped rather than averaged in.
