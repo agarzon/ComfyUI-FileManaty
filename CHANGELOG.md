@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.0 — 2026-09-01
+
+### Added
+
+- **Sort from the panel.** Sorting existed, but only through ComfyUI Settings — the wrong place for
+  a control you flip while browsing. The toolbar now has a field dropdown (Name / Date / Size /
+  Type) and an arrow that toggles the direction. The choice applies immediately and persists as the
+  new default, and the Settings entries stay in sync with it.
+
 ## v0.13.0 — 2026-08-10
 
 ### Added
