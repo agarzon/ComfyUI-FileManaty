@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.15.0 — 2026-09-02
+
+### Fixed
+
+- **The upload progress bar was always full.** It counted the file *about* to be sent, so a
+  single-file upload sat at 100% from the first frame — and even corrected, `fetch()` cannot report
+  upload progress at all. Uploads now go over `XMLHttpRequest`, which can.
+
+### Added
+
+- **A transfer tray.** Uploads get a panel with one row per file, live byte progress, transfer
+  speed and an ETA for the whole batch. Any transfer can be cancelled — a single file with its own
+  ✕, everything still queued with the header's. The tray lives outside the file manager, so closing
+  the panel neither hides it nor stops the upload, and it stays put after a failure so you can see
+  which file went wrong.
+
 ## v0.14.0 — 2026-09-01
 
 ### Added

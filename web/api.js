@@ -102,22 +102,46 @@ export function purgeTrash(root, { ids, all } = {}) {
     return postJSON("/trash/purge", all ? { root, all: true } : { root, ids });
 }
 
-// Multipart upload. `files` is a FileList/array of File. Returns the result data.
-// onConflict (optional) is sent as a query param so the body stays pure file data.
-export async function uploadFiles(root, path, files, onConflict) {
+// Multipart upload. `files` is a FileList/array of File. onConflict (optional) is
+// sent as a query param so the body stays pure file data. Returns a promise for
+// the result data, carrying an extra abort() — XHR rather than fetch(), which
+// cannot report upload progress at all. A cancelled request rejects with
+// err.cancelled; every other rejection keeps the code/status/conflicts shape.
+export function uploadFiles(root, path, files, onConflict, onProgress) {
     const form = new FormData();
     form.append("root", root);
     form.append("path", path);
     for (const f of files) form.append("file", f, f.name);
     const q = onConflict ? `?${new URLSearchParams({ on_conflict: onConflict })}` : "";
-    const resp = await fetch(`${BASE}/upload${q}`, { method: "POST", body: form });
-    const data = await resp.json();
-    if (!data.ok) {
-        const err = new Error(data.error?.message || "upload failed");
-        err.code = data.error?.code;
-        err.status = resp.status;
-        err.conflicts = data.error?.conflicts || [];
-        throw err;
-    }
-    return data.data;
+    const xhr = new XMLHttpRequest();
+    const promise = new Promise((resolve, reject) => {
+        xhr.open("POST", `${BASE}/upload${q}`);
+        if (onProgress) xhr.upload.onprogress = (e) => onProgress(e.loaded);
+        xhr.onload = () => {
+            let data = null;
+            try { data = JSON.parse(xhr.responseText); } catch {}
+            if (!data?.ok) {
+                const err = new Error(data?.error?.message || "upload failed");
+                err.code = data?.error?.code;
+                err.status = xhr.status;
+                err.conflicts = data?.error?.conflicts || [];
+                reject(err);
+                return;
+            }
+            resolve(data.data);
+        };
+        // A transport failure has no envelope to read a code out of, but the
+        // fields callers branch on still have to be there.
+        xhr.onerror = () => {
+            const err = new Error("upload failed");
+            err.code = undefined;
+            err.status = xhr.status;   // 0 when the request never reached the server
+            err.conflicts = [];
+            reject(err);
+        };
+        xhr.onabort = () => { const e = new Error("cancelled"); e.cancelled = true; reject(e); };
+        xhr.send(form);
+    });
+    promise.abort = () => xhr.abort();
+    return promise;
 }

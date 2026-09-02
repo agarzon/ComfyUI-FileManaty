@@ -33,4 +33,4 @@ jobs:
       # Named explicitly: `node --test <dir>` treats a directory with no test
       # files as a missing module and fails.
       - name: Frontend check
-        run: node --test tests/test_upload.mjs
+        run: node --test tests/test_upload.mjs tests/test_transfers.mjs

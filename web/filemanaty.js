@@ -2,7 +2,8 @@ import { app } from "../../scripts/app.js";
 import { fetchRoots, fetchAbout, fetchList, thumbnailURL, previewURL, downloadURL, fetchMetadata, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
 import { doCopy, doCut, doPaste, runWithConflicts } from "./clipboard.js";
 import { clickSelect, selectAll } from "./selection.js";
-import { promptText, confirmDialog, conflictDialog, toast, trashView, progressBar, isDialogOpen } from "./dialogs.js";
+import { promptText, confirmDialog, conflictDialog, toast, trashView, isDialogOpen } from "./dialogs.js";
+import { transferTray } from "./transfers.js";
 import { attachContextMenu } from "./contextmenu.js";
 import { renderTree } from "./tree.js";
 import { initPaneResize } from "./resize.js";
@@ -511,27 +512,47 @@ async function uploadTree(entries) {
         // on_conflict "replace" on a folder means exist_ok — this is mkdir -p
         await apiMkdir(STATE.currentRoot, parent, dir.slice(cut + 1), "replace");
     }
-    const bar = progressBar(entries.length);
+    let abortActive = null;
+    const tray = transferTray(
+        entries.map(({ file }) => ({ name: file.name, size: file.size })),
+        () => abortActive?.(),
+    );
     let policy = null;   // set once the user ticks "do this for all conflicts"
-    let done = 0, failed = 0, cancelled = false;
+    let done = 0, failed = 0, cancelled = 0;
     try {
-        for (const { file, dir } of entries) {
-            bar.set(done + 1, file.name);   // 1-based: the file in flight, and it reaches total
+        for (let i = 0; i < entries.length; i++) {
+            const { file, dir } = entries[i];
+            if (tray.cancelled(i)) { cancelled++; continue; }
             const path = joinPath(STATE.currentPath, dir);
+            const send = (oc) => {
+                const req = apiUpload(STATE.currentRoot, path, [file], oc, (loaded) => tray.progress(i, loaded));
+                abortActive = req.abort;
+                return req;
+            };
+            tray.start(i);
             try {
-                await apiUpload(STATE.currentRoot, path, [file], policy);
+                await send(policy);
             } catch (e) {
-                if (e.status !== 409) { failed++; done++; continue; }
+                if (e.cancelled) { tray.finish(i, "cancelled"); cancelled++; continue; }
+                if (e.status !== 409) { tray.finish(i, "failed"); failed++; continue; }
+                tray.progress(i, 0);   // the rejected attempt's bytes are not on disk
                 const choice = await conflictDialog(e.conflicts || [file.name]);
-                if (!choice) { cancelled = true; break; }  // stop the queue
+                if (!choice) { tray.finish(i, "cancelled"); cancelled++; break; }  // stop the queue
                 if (choice.all) policy = choice.policy;
-                try { await apiUpload(STATE.currentRoot, path, [file], choice.policy); }
-                catch { failed++; }
+                try {
+                    await send(choice.policy);
+                } catch (retry) {
+                    tray.finish(i, retry.cancelled ? "cancelled" : "failed");
+                    retry.cancelled ? cancelled++ : failed++;
+                    continue;
+                }
             }
+            tray.finish(i, "done");
             done++;
         }
     } finally {
-        bar.done();
+        abortActive = null;
+        tray.finishAll();
     }
     await refresh();
     if (failed) toast(`${failed} of ${entries.length} upload(s) failed`, "error");

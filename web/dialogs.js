@@ -164,21 +164,6 @@ async function restoreWithConflict(root, id) {
     }
 }
 
-// A progress strip for a long batch. Native <progress> — no bar to style or own.
-export function progressBar(total) {
-    const el = document.createElement("div");
-    el.style.cssText = "position:fixed;bottom:18px;left:18px;z-index:9600;display:flex;gap:10px;align-items:center;max-width:360px;background:var(--fm-bg-elevated);color:var(--fm-text);padding:8px 14px;border-radius:6px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.4);";
-    el.innerHTML = `<progress max="${total}" value="0"></progress>
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>`;
-    document.body.appendChild(el);
-    const bar = el.querySelector("progress");
-    const label = el.querySelector("span");
-    return {
-        set(done, name) { bar.value = done; label.textContent = `${done}/${total} · ${name}`; },
-        done() { el.remove(); },
-    };
-}
-
 let toastHost = null;
 export function toast(message, kind = "info") {
     if (!toastHost) {
