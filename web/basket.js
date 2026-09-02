@@ -107,8 +107,11 @@ export function renderBasket() {
         items.appendChild(chip);
     }
 
-    el.querySelector('[data-fm-b="copy"]').onclick = () => pasteBasket(false);
-    el.querySelector('[data-fm-b="move"]').onclick = () => pasteBasket(true);
-    el.querySelector('[data-fm-b="delete"]').onclick = deleteBasket;
+    // Paths in the basket can go stale — the folder they name may have been
+    // renamed or deleted from another tab — so these requests do fail.
+    const guard = (fn) => () => fn().catch((e) => toast(e.message || "Action failed", "error"));
+    el.querySelector('[data-fm-b="copy"]').onclick = guard(() => pasteBasket(false));
+    el.querySelector('[data-fm-b="move"]').onclick = guard(() => pasteBasket(true));
+    el.querySelector('[data-fm-b="delete"]').onclick = guard(deleteBasket);
     el.querySelector('[data-fm-b="clear"]').onclick = clearBasket;
 }
