@@ -120,7 +120,9 @@ function syncSortControls() {
     field.value = settings.get(SETTINGS_KEYS.SORT_FIELD);
     const desc = settings.get(SETTINGS_KEYS.SORT_ORDER) === "desc";
     order.textContent = desc ? "↓" : "↑";
+    // The glyph is the whole button, so it needs a real name for assistive tech.
     order.title = desc ? "Descending — click for ascending" : "Ascending — click for descending";
+    order.setAttribute("aria-label", order.title);
 }
 
 export const STATE = {
