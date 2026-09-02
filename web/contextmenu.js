@@ -43,6 +43,7 @@ export function attachContextMenu(actions) {
                 { label: "Rename", onClick: actions.rename },
                 { label: "Copy", onClick: actions.copy },
                 { label: "Cut", onClick: actions.cut },
+                { label: "Add to basket", onClick: actions.basket },
                 { separator: true },
             ];
             if (entry && entry.type === "file") {

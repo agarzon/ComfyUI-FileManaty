@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16.0 — 2026-09-02
+
+### Added
+
+- **The basket: a selection that survives navigation.** Copy, move and delete could only ever act
+  on one folder at a time, because leaving a folder cleared the selection. Items now go into a
+  basket with **🧺** in the toolbar or **Add to basket** in the context menu, and the basket keeps
+  collecting as you browse. Copy here / Move here paste the whole thing into the folder you are
+  standing in — including a different root — and Delete sends all of it to the trash.
+
+  Clicking still selects within one folder and still clears when you leave it. Nothing enters the
+  basket without being asked, and everything in it is listed with its path, because acting on files
+  you cannot see is how the wrong one gets deleted. One basket holds one root at a time.
+
 ## v0.15.0 — 2026-09-02
 
 ### Fixed

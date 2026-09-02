@@ -4,6 +4,7 @@ import { doCopy, doCut, doPaste, runWithConflicts } from "./clipboard.js";
 import { clickSelect, selectAll } from "./selection.js";
 import { promptText, confirmDialog, conflictDialog, toast, trashView, isDialogOpen } from "./dialogs.js";
 import { transferTray } from "./transfers.js";
+import { addSelection, renderBasket } from "./basket.js";
 import { attachContextMenu } from "./contextmenu.js";
 import { renderTree } from "./tree.js";
 import { initPaneResize } from "./resize.js";
@@ -135,6 +136,7 @@ export const STATE = {
     selected: new Set(),   // names selected in the current folder
     anchorName: null,      // last single-clicked name, for Shift-range
     clipboard: null,       // { op: "copy"|"cut", root, paths: [relPath...] }
+    basket: { root: null, paths: [] },   // explicit cross-folder selection, one root, survives navigation
     roots: [],
     filter: { query: "", kind: "all" },  // client-side current-folder filter; kind ∈ all|image|video|audio|folder|other
     truncated: false,                    // true when the current folder hit the /list 5000-entry cap
@@ -216,6 +218,7 @@ function buildOverlay() {
             <button class="fm-tb" data-act="copy">⧉ Copy</button>
             <button class="fm-tb" data-act="cut">✂ Cut</button>
             <button class="fm-tb" data-act="paste">📋 Paste</button>
+            <button class="fm-tb" data-act="basket" title="Add selection to basket" aria-label="Add selection to basket">🧺</button>
             <button class="fm-tb" data-act="trash">♻ Trash</button>
             <button class="fm-tb danger" data-act="delete">🗑 Delete</button>
             <button id="fm-refresh" class="fm-tb">↻ Refresh</button>
@@ -225,6 +228,7 @@ function buildOverlay() {
             <div id="fm-grid" style="overflow:auto;padding:10px;display:grid;gap:8px;align-content:start;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));"></div>
             <div id="fm-preview" style="padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--fm-bg);min-height:0;overflow:hidden;"></div>
         </div>
+        <div id="fm-basket" style="display:none;border-top:1px solid var(--fm-border);background:var(--fm-bg-elevated);font-size:12px;"></div>
     `;
     const style = document.createElement("style");
     style.textContent = `#filemanaty-overlay .fm-tb{background:var(--fm-hover);border:0;color:inherit;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px}
@@ -414,6 +418,7 @@ async function initOverlay() {
         del: (perm) => actDelete(perm).catch((x) => toast(x.message, "error")),
         copy: doCopy,
         cut: doCut,
+        basket: addSelection,
         paste: () => doPaste().catch((x) => toast(x.message, "error")),
         upload: () => document.getElementById("fm-file-input").click(),
     });
@@ -480,6 +485,7 @@ function updateWritableUI() {
         b.style.cursor = writable ? "pointer" : "not-allowed";
         b.title = writable ? "" : "This root is read-only";
     });
+    renderBasket();   // its buttons follow the root you would paste into
 }
 
 async function onToolbarAction(act) {
@@ -492,6 +498,7 @@ async function onToolbarAction(act) {
         if (act === "cut") return doCut();
         if (act === "paste") return await doPaste();
         if (act === "delete") return await actDelete(false);
+        if (act === "basket") return addSelection();
         if (act === "trash") return await trashView(() => refresh());
     } catch (e) {
         console.error("filemanaty action failed:", e);
@@ -584,9 +591,13 @@ export async function actRename() {
     toast("Renamed", "success");
 }
 
-export async function actDelete(permanent) {
-    if (STATE.selected.size === 0) { toast("Nothing selected"); return; }
-    const items = [...STATE.selected].map(childPathOf);
+// `source` overrides the current selection ({root, paths}), which is how the
+// basket deletes items sitting in folders that are not on screen. Returns
+// whether the delete actually ran, so a caller can drop what it just deleted.
+export async function actDelete(permanent, source) {
+    const root = source ? source.root : STATE.currentRoot;
+    const items = source ? source.paths : [...STATE.selected].map(childPathOf);
+    if (items.length === 0) { toast("Nothing selected"); return false; }
     const verb = permanent ? "Permanently delete" : "Move to Trash";
     const needConfirm = permanent
         ? settings.get(SETTINGS_KEYS.CONFIRM_ON_SHIFT_DELETE)
@@ -595,11 +606,12 @@ export async function actDelete(permanent) {
         const ok = await confirmDialog(`${verb} ${items.length} item(s)?`,
             permanent ? "This cannot be undone." : "You can restore from Trash later.",
             { danger: permanent });
-        if (!ok) return;
+        if (!ok) return false;
     }
-    await apiDel(STATE.currentRoot, items, permanent);
+    await apiDel(root, items, permanent);
     await refresh();
     toast(permanent ? "Deleted" : "Moved to Trash", "success");
+    return true;
 }
 
 function highlightTab() {
