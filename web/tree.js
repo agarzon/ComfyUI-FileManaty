@@ -45,7 +45,9 @@ function favoriteRow(f) {
 
     const open = document.createElement("button");
     open.type = "button";
-    open.textContent = "★ " + (f.path ? f.path.split("/").pop() : rootLabel(f.root));
+    open.innerHTML = `<span class="fm-fav-mark">★</span> <span data-fm-fav-name></span>`;
+    open.querySelector("[data-fm-fav-name]").textContent =
+        f.path ? f.path.split("/").pop() : rootLabel(f.root);
     open.title = full;
     open.setAttribute("aria-label", `Open ${full}`);
     if (active) open.setAttribute("aria-current", "true");

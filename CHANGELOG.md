@@ -18,6 +18,15 @@
   (which also excludes the trash), and files reached through a symlink pointing outside the root
   are skipped — a zip is not a way around the sandbox that `/download` enforces.
 
+### Changed
+
+- **The favorites star moved to the top bar and turns gold.** Tucked between the breadcrumb and the
+  filter box it read as one more toolbar button and was easy to miss entirely. It now sits on the
+  right of the header next to the GitHub link, and a pinned folder shows a **gold ★** instead of a
+  muted outline — the fill alone was too quiet to spot at a glance. The ★ marking each row in the
+  favorites list is gold for the same reason. The glyph still changes with the state, so the cue
+  does not rest on color alone.
+
 ## v0.17.0 — 2026-09-03
 
 ### Added

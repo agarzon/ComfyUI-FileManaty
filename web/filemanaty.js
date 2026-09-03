@@ -183,6 +183,7 @@ function buildOverlay() {
                 <span class="fm-ver" id="fm-version"></span>
             </div>
             <div class="fm-head-right">
+                <button id="fm-fav" type="button" class="fm-star" aria-pressed="false" aria-label="Favorite this folder" title="Add this folder to favorites">☆</button>
                 <a class="fm-gh" href="${REPO_URL}" target="_blank" rel="noopener" title="View source on GitHub">${GITHUB_SVG}<span>GitHub</span></a>
                 <button id="fm-close" title="Close" style="background:none;border:0;color:inherit;font-size:18px;cursor:pointer;line-height:1">✕</button>
             </div>
@@ -192,7 +193,6 @@ function buildOverlay() {
         <input id="fm-dir-input" type="file" multiple webkitdirectory style="display:none">
         <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
             <span id="fm-breadcrumb"></span>
-            <button id="fm-fav" class="fm-tb" data-act="favorite" title="Add this folder to favorites" aria-label="Add this folder to favorites" style="padding:4px 8px">☆</button>
             <input id="fm-search-input" class="fm-search" type="text" placeholder="Filter…" autocomplete="off">
             <button id="fm-search-clear" class="fm-tb" title="Clear filter" style="padding:4px 8px">✕</button>
             <select id="fm-type-filter" class="fm-search">
@@ -249,6 +249,11 @@ function buildOverlay() {
 #filemanaty-overlay .fm-head-right{display:flex;align-items:center;gap:16px}
 #filemanaty-overlay .fm-gh{display:inline-flex;align-items:center;gap:6px;color:var(--fm-text-muted);text-decoration:none;font-size:12px;transition:color .15s}
 #filemanaty-overlay .fm-gh:hover{color:var(--fm-text)}
+#filemanaty-overlay .fm-star{background:none;border:0;padding:0;line-height:1;font-size:18px;cursor:pointer;color:var(--fm-text-muted);transition:color .15s}
+#filemanaty-overlay .fm-star:hover{color:var(--fm-text)}
+/* A pinned folder is gold in every theme — the fill alone is too quiet to spot. */
+#filemanaty-overlay .fm-star.on,#filemanaty-overlay .fm-star.on:hover{color:#f5b301}
+#filemanaty-overlay .fm-fav-mark{color:#f5b301}
 #filemanaty-overlay .fm-gh svg{width:15px;height:15px}
 #filemanaty-overlay .fm-gutter{background:var(--fm-border);cursor:col-resize;touch-action:none;transition:background .12s}
 #filemanaty-overlay .fm-gutter:hover{background:var(--fm-accent)}`;
@@ -269,6 +274,7 @@ async function loadVersion() {
 
 async function initOverlay() {
     document.getElementById("fm-close").addEventListener("click", closeOverlay);
+    document.getElementById("fm-fav").addEventListener("click", actFavorite);
     initPaneResize(document.getElementById("fm-body"));
     loadVersion();
     document.addEventListener("keydown", (e) => {
@@ -499,8 +505,12 @@ export function syncFavoriteButton() {
     if (!btn) return;
     const on = isFavorite(loadFavorites(), STATE.currentRoot, STATE.currentPath);
     btn.textContent = on ? "★" : "☆";
+    btn.classList.toggle("on", on);
+    // A toggle carries its state in aria-pressed and keeps one stable name —
+    // a name that changes with the state as well would announce twice over.
+    // The title is the sighted tooltip, so it still names the action.
+    btn.setAttribute("aria-pressed", String(on));
     btn.title = on ? "Remove this folder from favorites" : "Add this folder to favorites";
-    btn.setAttribute("aria-label", btn.title);
 }
 
 // The archive is built server-side before it sends, so the browser gets a real
@@ -545,7 +555,6 @@ async function onToolbarAction(act) {
         if (act === "paste") return await doPaste();
         if (act === "delete") return await actDelete(false);
         if (act === "basket") return addSelection();
-        if (act === "favorite") return actFavorite();
         if (act === "zip") return actZip();
         if (act === "trash") return await trashView(() => refresh());
     } catch (e) {
