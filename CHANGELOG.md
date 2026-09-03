@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.18.0 — 2026-09-03
+
+### Added
+
+- **Download a selection as one ZIP.** Downloading was one file at a time, so pulling a batch of
+  renders off a headless box meant one click per file. Select anything — files, folders, a mix —
+  and **⬇ ZIP** in the toolbar or **Download as ZIP** in the right-click menu hands you a single
+  archive. Folders keep their shape inside it, so what you unpack is what you saw.
+
+  The archive is built server-side before the first byte goes out, which is what gives the
+  response a real `Content-Length` — so your browser's own download manager shows bytes, speed and
+  ETA, exactly as it does for a single file. The tradeoff is a quiet moment while a large
+  selection is packed.
+
+  Zipping only reads, so it works on read-only roots. Hidden files are left out at every level
+  (which also excludes the trash), and files reached through a symlink pointing outside the root
+  are skipped — a zip is not a way around the sandbox that `/download` enforces.
+
 ## v0.17.0 — 2026-09-03
 
 ### Added

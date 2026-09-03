@@ -1,5 +1,5 @@
 import { app } from "../../scripts/app.js";
-import { fetchRoots, fetchAbout, fetchList, thumbnailURL, previewURL, downloadURL, fetchMetadata, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
+import { fetchRoots, fetchAbout, fetchList, thumbnailURL, previewURL, downloadURL, zipURL, fetchMetadata, mkdir as apiMkdir, rename as apiRename, del as apiDel, uploadFiles as apiUpload } from "./api.js";
 import { doCopy, doCut, doPaste, runWithConflicts } from "./clipboard.js";
 import { clickSelect, selectAll } from "./selection.js";
 import { promptText, confirmDialog, conflictDialog, toast, trashView, isDialogOpen } from "./dialogs.js";
@@ -220,6 +220,7 @@ function buildOverlay() {
             <button class="fm-tb" data-act="copy">⧉ Copy</button>
             <button class="fm-tb" data-act="cut">✂ Cut</button>
             <button class="fm-tb" data-act="paste">📋 Paste</button>
+            <button class="fm-tb" data-act="zip" title="Download the selection as one ZIP" aria-label="Download the selection as one ZIP">⬇ ZIP</button>
             <button class="fm-tb" data-act="basket" title="Add selection to basket" aria-label="Add selection to basket">🧺</button>
             <button class="fm-tb" data-act="trash">♻ Trash</button>
             <button class="fm-tb danger" data-act="delete">🗑 Delete</button>
@@ -421,6 +422,7 @@ async function initOverlay() {
         copy: doCopy,
         cut: doCut,
         basket: addSelection,
+        zip: actZip,
         paste: () => doPaste().catch((x) => toast(x.message, "error")),
         upload: () => document.getElementById("fm-file-input").click(),
     });
@@ -501,6 +503,15 @@ export function syncFavoriteButton() {
     btn.setAttribute("aria-label", btn.title);
 }
 
+// The archive is built server-side before it sends, so the browser gets a real
+// Content-Length and its own download manager reports the transfer. A big
+// selection sits quiet while it builds — the wait is in the build, not the wire.
+export function actZip() {
+    const paths = selectedPaths();
+    if (!paths.length) { toast("Nothing selected"); return; }
+    window.open(zipURL(STATE.currentRoot, paths), "_blank");
+}
+
 function actFavorite() {
     if (!STATE.currentRoot) return;
     saveFavorites(toggleIn(loadFavorites(), STATE.currentRoot, STATE.currentPath));
@@ -535,6 +546,7 @@ async function onToolbarAction(act) {
         if (act === "delete") return await actDelete(false);
         if (act === "basket") return addSelection();
         if (act === "favorite") return actFavorite();
+        if (act === "zip") return actZip();
         if (act === "trash") return await trashView(() => refresh());
     } catch (e) {
         console.error("filemanaty action failed:", e);

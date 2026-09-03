@@ -35,6 +35,11 @@ API_PREFIX = "/filemanaty/api/v1"
 MAX_LIST_ENTRIES = 5000
 _VALID_ON_CONFLICT = (None, "skip", "replace", "keep_both")
 
+# /zip takes one query param per item, so the cap is really about the request
+# line the server will accept before it 414s — this refuses first, with a
+# readable error instead of a raw protocol failure.
+MAX_ZIP_ITEMS = 200
+
 
 def _parse_bool(raw: Optional[str], *, default: bool) -> Optional[bool]:
     """Parse a query-param bool. Returns the bool, or None if ``raw`` is invalid.
@@ -413,6 +418,68 @@ async def _preview(request: web.Request) -> web.Response:
 
 async def _download(request: web.Request) -> web.Response:
     return await _file_endpoint(request, attachment=True)
+
+
+async def _zip(request: web.Request) -> web.Response:
+    """Download a selection as one archive.
+
+    A GET so the browser's own download manager handles it, and the archive is
+    built to a temp file before a byte is sent: that yields a real
+    Content-Length, which is what makes the browser show bytes, speed and ETA.
+    The cost is a silent wait while it builds, and the temp file, which is
+    unlinked once the response is written.
+    """
+    cfg = _get_config()
+    root_id = request.query.get("root")
+    items = request.query.getall("path", [])
+    if root_id is None or not items:
+        return _err("BAD_REQUEST", "missing 'root' or 'path' query param", 400)
+    if len(items) > MAX_ZIP_ITEMS:
+        return _err("BAD_REQUEST", f"cannot zip more than {MAX_ZIP_ITEMS} items at once", 400)
+    try:
+        root = _find_root(cfg, root_id)
+        targets = [safe_resolve(root.path, _strip_path(s)) for s in items]
+    except PathEscapeError as exc:
+        return _err("ACCESS_DENIED", str(exc), 403)
+    for t in targets:
+        if _is_trash_path(t, root.path):
+            return _err("ACCESS_DENIED", "cannot zip the trash directory", 403)
+        if (resp := _reject_hidden(t, root.path)) is not None:
+            return resp
+        if not t.exists():
+            return _err("NOT_FOUND", f"no such item: {t.name}", 404)
+
+    if len(targets) == 1:
+        zip_name = f"{targets[0].name}.zip"
+    else:
+        zip_name = f"{targets[0].parent.name or root.id}.zip"
+
+    loop = asyncio.get_running_loop()
+    tmp = Path(tempfile.gettempdir()) / f"filemanaty-{secrets.token_hex(8)}.zip"
+    try:
+        try:
+            await loop.run_in_executor(
+                None, functools.partial(ops.write_zip, root.path, targets, tmp))
+        except OSError as exc:
+            log.info("filemanaty: zip build failed for root %s: %s", root.id, exc)
+            return _err("IO_ERROR", "could not build the archive", 500)
+
+        response = await _stream_file(tmp, attachment_name=zip_name)
+        response.content_length = tmp.stat().st_size   # no Content-Length, no browser progress
+        await response.prepare(request)
+        f = await loop.run_in_executor(None, tmp.open, "rb")
+        try:
+            while True:
+                chunk = await loop.run_in_executor(None, f.read, 64 * 1024)
+                if not chunk:
+                    break
+                await response.write(chunk)
+        finally:
+            await loop.run_in_executor(None, f.close)
+        await response.write_eof()
+        return response
+    finally:
+        await loop.run_in_executor(None, functools.partial(tmp.unlink, missing_ok=True))
 
 
 async def _metadata(request: web.Request) -> web.Response:
@@ -900,6 +967,7 @@ def attach_routes(app: web.Application) -> None:
     app.router.add_get(f"{API_PREFIX}/thumbnail", _thumbnail)
     app.router.add_get(f"{API_PREFIX}/preview", _preview)
     app.router.add_get(f"{API_PREFIX}/download", _download)
+    app.router.add_get(f"{API_PREFIX}/zip", _zip)
     app.router.add_get(f"{API_PREFIX}/metadata", _metadata)
     app.router.add_post(f"{API_PREFIX}/upload", _upload)
     app.router.add_post(f"{API_PREFIX}/mkdir", _mkdir)
