@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.17.0 — 2026-09-03
+
+### Added
+
+- **Favorite folders.** Deep folders cost the same walk down the tree every session. The **☆**
+  next to the breadcrumb pins the folder you are standing in, and it appears above the tree as a
+  one-click shortcut — including into a different root. The star fills in to **★** when the folder
+  on screen is already saved, so it reads as "is this one pinned?" as much as it acts.
+
+  Favorites are per-browser and stored locally next to the last-used root; nothing is written on
+  the server and no new endpoint exists. A favorite whose folder was renamed or deleted says so
+  and drops you at the root instead of leaving the panel on a folder that is not there, and one
+  pointing at a root no longer in `config.json` is hidden rather than discarded.
+
 ## v0.16.0 — 2026-09-02
 
 ### Added

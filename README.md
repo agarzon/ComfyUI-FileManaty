@@ -23,6 +23,7 @@
 ## ✨ Features
 
 - 🗂️ **Explorer-style file manager** — a folder tree, a thumbnail grid, and a live preview pane, all in one fullscreen overlay with **drag-resizable panes** (double-click a divider to reset).
+- ⭐ **Favorite folders** — pin the folder you're in with the **☆** by the breadcrumb; it sits above the tree as a one-click jump, across roots.
 - 🖼️ **Rich previews** — inline images, an HTML5 **video** player, and an **audio** player. Generated files show their **resolution** (`1024 × 1024`), size, and date at a glance.
 - 🧠 **See the generation behind the file** — embedded ComfyUI metadata (positive/negative prompt, seed, model, LoRAs) surfaced in the preview, with one-click **Copy JSON** and **Load on canvas** to drop the workflow straight onto your graph.
 - 📤 **Full write operations** — create folders, rename, upload **files or whole folders** (button or drag from your desktop, with per-file progress, speed, ETA and cancel), copy/cut/paste, and move — within and across roots. A **basket** collects items across folders so one copy, move or delete can act on all of them.
@@ -107,7 +108,7 @@ FileManaty can write to your filesystem, so please read this.
 
 ## 🗺️ Roadmap
 
-Shipped recently: folder upload (drop a folder or pick one), one unified trash, drag-resizable overlay panes, auto-mounted Workflows root, in-folder name + type filter, rich video + audio preview, embedded-metadata cards, Load-on-canvas, and a native theme-following UI. Coming next:
+Shipped recently: favorite folders, folder upload (drop a folder or pick one), one unified trash, drag-resizable overlay panes, auto-mounted Workflows root, in-folder name + type filter, rich video + audio preview, embedded-metadata cards, Load-on-canvas, and a native theme-following UI. Coming next:
 
 - 🔍 **Server-side & metadata search** — search across a whole root (past the listing cap) and find files by the **prompt / model / seed** that made them. *(In-folder name + type filtering shipped in v0.8.0.)*
 - 🔐 **Optional built-in authentication** — a lightweight password mode for small deployments.

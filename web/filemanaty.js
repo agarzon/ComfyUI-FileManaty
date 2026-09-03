@@ -7,6 +7,7 @@ import { transferTray } from "./transfers.js";
 import { addSelection, renderBasket } from "./basket.js";
 import { attachContextMenu } from "./contextmenu.js";
 import { renderTree } from "./tree.js";
+import { load as loadFavorites, save as saveFavorites, isFavorite, toggleIn } from "./favorites.js";
 import { initPaneResize } from "./resize.js";
 import { makeDraggable, makeDropTarget } from "./dnd.js";
 import { walkDrop, filesFromPicker, dirsToCreate } from "./upload.js";
@@ -191,6 +192,7 @@ function buildOverlay() {
         <input id="fm-dir-input" type="file" multiple webkitdirectory style="display:none">
         <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
             <span id="fm-breadcrumb"></span>
+            <button id="fm-fav" class="fm-tb" data-act="favorite" style="padding:4px 8px">☆</button>
             <input id="fm-search-input" class="fm-search" type="text" placeholder="Filter…" autocomplete="off">
             <button id="fm-search-clear" class="fm-tb" title="Clear filter" style="padding:4px 8px">✕</button>
             <select id="fm-type-filter" class="fm-search">
@@ -470,7 +472,25 @@ export async function navigateTo(rootId, relPath) {
     try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {}
     highlightTab();
     updateWritableUI();
+    syncFavoriteButton();
     await refresh();   // refresh() re-renders the tree too
+}
+
+// The star reflects the folder on screen, so it doubles as "is this one saved?".
+export function syncFavoriteButton() {
+    const btn = document.getElementById("fm-fav");
+    if (!btn) return;
+    const on = isFavorite(loadFavorites(), STATE.currentRoot, STATE.currentPath);
+    btn.textContent = on ? "★" : "☆";
+    btn.title = on ? "Remove this folder from favorites" : "Add this folder to favorites";
+    btn.setAttribute("aria-label", btn.title);
+}
+
+function actFavorite() {
+    if (!STATE.currentRoot) return;
+    saveFavorites(toggleIn(loadFavorites(), STATE.currentRoot, STATE.currentPath));
+    syncFavoriteButton();
+    renderTree().catch((e) => console.error("filemanaty tree render failed:", e));
 }
 
 // Disable write actions in the toolbar when the current root is read-only.
@@ -499,6 +519,7 @@ async function onToolbarAction(act) {
         if (act === "paste") return await doPaste();
         if (act === "delete") return await actDelete(false);
         if (act === "basket") return addSelection();
+        if (act === "favorite") return actFavorite();
         if (act === "trash") return await trashView(() => refresh());
     } catch (e) {
         console.error("filemanaty action failed:", e);
