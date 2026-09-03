@@ -10,9 +10,17 @@
   on screen is already saved, so it reads as "is this one pinned?" as much as it acts.
 
   Favorites are per-browser and stored locally next to the last-used root; nothing is written on
-  the server and no new endpoint exists. A favorite whose folder was renamed or deleted says so
-  and drops you at the root instead of leaving the panel on a folder that is not there, and one
-  pointing at a root no longer in `config.json` is hidden rather than discarded.
+  the server and no new endpoint exists. A favorite pointing at a root no longer in `config.json`
+  is hidden rather than discarded — the config may name it again.
+
+### Fixed
+
+- **Opening a folder that was gone left the panel pointing at nothing.** Renaming or deleting a
+  folder from another tab — or clicking a favorite that outlived what it named — moved the panel
+  to the missing folder and then failed to list it, so the breadcrumb, the tree and Refresh all
+  disagreed with each other until you navigated somewhere real. Navigation now stays where it was
+  and says what happened, on every route into a folder: the grid, the tree, the breadcrumb, the
+  root tabs and the keyboard.
 
 ## v0.16.0 — 2026-09-02
 

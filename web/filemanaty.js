@@ -463,17 +463,32 @@ function renderTabs(roots) {
     }
 }
 
-export async function navigateTo(rootId, relPath) {
+function applyLocation(rootId, relPath) {
     STATE.currentRoot = rootId;
     STATE.currentPath = relPath;
     STATE.selected.clear();
     STATE.anchorName = null;
     resetFilter();
-    try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {}
+    if (rootId) { try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {} }
     highlightTab();
     updateWritableUI();
     syncFavoriteButton();
-    await refresh();   // refresh() re-renders the tree too
+}
+
+export async function navigateTo(rootId, relPath) {
+    const prev = { root: STATE.currentRoot, path: STATE.currentPath };
+    applyLocation(rootId, relPath);
+    try {
+        await refresh();   // refresh() re-renders the tree too
+    } catch (e) {
+        // The destination is gone — renamed or deleted from another tab, or a
+        // stale favorite. Go back to where we were instead of leaving the panel
+        // pointing at a folder that is not there: every caller but one is a
+        // plain click handler with nowhere to put an error.
+        applyLocation(prev.root, prev.path);
+        rerender();
+        toast(e.message || "That folder is gone", "error");
+    }
 }
 
 // The star reflects the folder on screen, so it doubles as "is this one saved?".

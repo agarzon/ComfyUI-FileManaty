@@ -2,7 +2,6 @@ import { fetchList } from "./api.js";
 import { STATE, navigateTo, syncFavoriteButton } from "./filemanaty.js";
 import { makeDropTarget } from "./dnd.js";
 import { load as loadFavorites, save as saveFavorites, toggleIn } from "./favorites.js";
-import { toast } from "./dialogs.js";
 
 // Expanded folder keys ("root path"), module-global so they survive re-renders.
 const expanded = new Set();
@@ -59,13 +58,7 @@ function favoriteRow(f) {
     };
     row.appendChild(remove);
 
-    // A favorite outlives the folder it names, so this navigation does fail —
-    // and a failed navigate leaves the panel pointing at a folder that is not
-    // there, so fall back to the root rather than stranding it.
-    row.onclick = () => navigateTo(f.root, f.path).catch((e) => {
-        toast(e.message || "That folder is gone", "error");
-        return navigateTo(f.root, "").catch(() => {});
-    });
+    row.onclick = () => navigateTo(f.root, f.path);
     return row;
 }
 
