@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.19.1 — 2026-09-03
+
+### Documentation
+
+- **A worked portable config, and what large uploads cost.** Relative paths landed in v0.19.0 but
+  were never shown, so mounting the workflows folder meant knowing it lives at
+  `user/default/workflows` and that a configured root — unlike auto-mounting — will not create it.
+  The README now carries a complete example plus the three traps: a `config.json` replaces
+  auto-mounting entirely, a configured workflows root does not create the folder, and
+  `--user-directory` is not followed by a literal path.
+
+  A new upload section covers raising `write.max_upload_mb` for models and LoRAs, why ComfyUI's
+  own `--max-upload-size` does not govern it, and the four things that scale badly: no resume, the
+  cap enforced only as bytes arrive, temp space in the destination, and a reverse proxy's stricter
+  limit. `config.example.json` gains `inputs` and `workflows` so copying it yields a complete set
+  of roots.
+
 ## v0.19.0 — 2026-09-03
 
 ### Added
