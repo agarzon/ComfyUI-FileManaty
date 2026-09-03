@@ -69,7 +69,7 @@ Open **ComfyUI Settings → 🦭 FileManaty**. These are per-browser display cho
 | **View → Show Thumbnails** | Toggle image and video thumbnails |
 | **View → Grid Density** | Compact / Normal / Comfortable |
 | **View → Thumbnail Size** | Small / Medium / Large |
-| **Sort → Field / Order** | Sort by name, size, date, or type — ascending or descending (also in the panel toolbar) |
+| **Sort → Field / Order** | Sort by name, size, date, or type — ascending or descending (also in the panel toolbar). Defaults to newest first |
 | **Sort → Folders First** | Keep folders above files |
 | **Open → Default Root** | Which root opens first (or "Last used") |
 | **Confirm → On Delete / On Shift-Delete** | Confirmation dialogs for trashing / permanent delete |
@@ -82,7 +82,7 @@ For security and capacity limits the server is the authority. Drop a `config.jso
 | `roots[]` | yes, once a `config.json` exists | auto-mount `output/` + `input/` + workflows | The browsable roots. Auto-mounting applies **only when there is no config file** — a `config.json` that omits `roots` logs a warning and leaves the UI empty |
 | `roots[].id` | yes | — | Matches `^[a-z0-9_-]{1,32}$`, unique |
 | `roots[].label` | yes | — | Display name shown in the UI |
-| `roots[].path` | yes | — | **Absolute** path; must exist and be a directory |
+| `roots[].path` | yes | — | Absolute, **or relative to your ComfyUI install directory** (`"models"` → `D:\ComfyUI\models`), which keeps one config file portable across machines and drives. Must exist and be a directory — a root whose path doesn't resolve is skipped with an error in the log, and the rest of the config still loads |
 | `roots[].writable` | no | `true` | Set `false` for a browse-only root |
 | `files.image_extensions` | no | png, jpg, jpeg, webp, gif, bmp, avif | Previewed inline + get thumbnails |
 | `files.video_extensions` | no | mp4, webm, mkv, mov | Get thumbnails (decoded server-side) + played inline where the browser supports the container |

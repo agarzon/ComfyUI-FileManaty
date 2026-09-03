@@ -1009,12 +1009,20 @@ def _attach_to_promptserver() -> None:
     except Exception:  # pragma: no cover - depends on ComfyUI runtime
         workflows_dir = None
 
+    # What a relative roots[].path in config.json hangs off, so the same file
+    # works on a portable install on any drive. Guarded like the rest.
+    try:
+        base_dir = Path(folder_paths.base_path)
+    except Exception:  # pragma: no cover - depends on ComfyUI runtime
+        base_dir = None
+
     global _config
     _config = load_config(
         config_path=config_path,
         default_output_dir=Path(folder_paths.get_output_directory()),
         default_input_dir=Path(folder_paths.get_input_directory()),
         default_workflows_dir=workflows_dir,
+        base_dir=base_dir,
     )
 
     log.info("filemanaty: loaded config from %s", config_path if config_path.exists() else "(defaults)")
