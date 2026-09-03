@@ -183,7 +183,7 @@ function buildOverlay() {
                 <span class="fm-ver" id="fm-version"></span>
             </div>
             <div class="fm-head-right">
-                <button id="fm-fav" class="fm-star" title="Add this folder to favorites" aria-label="Add this folder to favorites">☆</button>
+                <button id="fm-fav" type="button" class="fm-star" aria-pressed="false" aria-label="Favorite this folder" title="Add this folder to favorites">☆</button>
                 <a class="fm-gh" href="${REPO_URL}" target="_blank" rel="noopener" title="View source on GitHub">${GITHUB_SVG}<span>GitHub</span></a>
                 <button id="fm-close" title="Close" style="background:none;border:0;color:inherit;font-size:18px;cursor:pointer;line-height:1">✕</button>
             </div>
@@ -506,8 +506,11 @@ export function syncFavoriteButton() {
     const on = isFavorite(loadFavorites(), STATE.currentRoot, STATE.currentPath);
     btn.textContent = on ? "★" : "☆";
     btn.classList.toggle("on", on);
+    // A toggle carries its state in aria-pressed and keeps one stable name —
+    // a name that changes with the state as well would announce twice over.
+    // The title is the sighted tooltip, so it still names the action.
+    btn.setAttribute("aria-pressed", String(on));
     btn.title = on ? "Remove this folder from favorites" : "Add this folder to favorites";
-    btn.setAttribute("aria-label", btn.title);
 }
 
 // The archive is built server-side before it sends, so the browser gets a real
