@@ -88,7 +88,7 @@ For security and capacity limits the server is the authority. Drop a `config.jso
 | `files.video_extensions` | no | mp4, webm, mkv, mov | Get thumbnails (decoded server-side) + played inline where the browser supports the container |
 | `files.audio_extensions` | no | mp3, wav, ogg, m4a, flac | Played inline (HTML5 audio) |
 | `thumbnails.max_dimension` | no | `320` | Longest side, `64`–`1024` |
-| `write.max_upload_mb` | no | `1024` | Max size per uploaded file, `1`–`1048576` (1 TB). See [Uploading big files](#uploading-big-files) |
+| `write.max_upload_mb` | no | `1024` | Max size per uploaded file, `1`–`1048576`. Counted in MiB (`mb × 1024 × 1024`), so the default is 1 GiB and the ceiling 1 TiB. See [Uploading big files](#uploading-big-files) |
 
 If the config is malformed or invalid, FileManaty logs a clear error and falls back to the auto-mount defaults — **ComfyUI never crashes**. If the file is valid but a single root's path doesn't resolve, only that root is skipped (with an error naming it in the log) and the rest still loads.
 
@@ -126,7 +126,7 @@ On a portable Windows install that mounts `D:\ComfyUI\output`, `D:\ComfyUI\model
 
 #### Uploading big files
 
-Models and LoRAs run to tens of gigabytes, and the default cap is 1 GB per file. Raise it:
+Models and LoRAs run to tens of gigabytes, and the default cap is 1 GiB per file. Raise it:
 
 ```json
 { "write": { "max_upload_mb": 51200 } }
