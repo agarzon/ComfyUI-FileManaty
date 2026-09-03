@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.18.1 — 2026-09-03
+
+### Changed
+
+- **The favorites control is a labelled toolbar button.** Moving it to the header in v0.18.0 fixed
+  the wrong half of the problem: the gold ★ was easy to spot once a folder was *already* pinned,
+  but the idle ☆ was a bare grey glyph beside the grey GitHub link — invisible in exactly the state
+  you are in when you go looking for it. It is now **☆ Favorite** in the toolbar, shaped like
+  ⬇ ZIP and ♻ Trash, and the star fills gold when the folder on screen is pinned.
+
+### Fixed
+
+- **Toolbar labels could break mid-button, and on a narrow window the last buttons were out of
+  reach.** With enough buttons the row ran a few pixels over and flex-shrink split labels across
+  two lines rather than the row overflowing. Buttons no longer shrink or wrap their text, the
+  filter box gives back the width to fit, and the toolbar wraps onto a second line instead of
+  running the rightmost controls off the edge of a window too narrow to hold them.
+
 ## v0.18.0 — 2026-09-03
 
 ### Added
