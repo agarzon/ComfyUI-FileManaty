@@ -7,6 +7,7 @@ import { transferTray } from "./transfers.js";
 import { addSelection, renderBasket } from "./basket.js";
 import { attachContextMenu } from "./contextmenu.js";
 import { renderTree } from "./tree.js";
+import { load as loadFavorites, save as saveFavorites, isFavorite, toggleIn } from "./favorites.js";
 import { initPaneResize } from "./resize.js";
 import { makeDraggable, makeDropTarget } from "./dnd.js";
 import { walkDrop, filesFromPicker, dirsToCreate } from "./upload.js";
@@ -191,6 +192,7 @@ function buildOverlay() {
         <input id="fm-dir-input" type="file" multiple webkitdirectory style="display:none">
         <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
             <span id="fm-breadcrumb"></span>
+            <button id="fm-fav" class="fm-tb" data-act="favorite" title="Add this folder to favorites" aria-label="Add this folder to favorites" style="padding:4px 8px">☆</button>
             <input id="fm-search-input" class="fm-search" type="text" placeholder="Filter…" autocomplete="off">
             <button id="fm-search-clear" class="fm-tb" title="Clear filter" style="padding:4px 8px">✕</button>
             <select id="fm-type-filter" class="fm-search">
@@ -461,16 +463,49 @@ function renderTabs(roots) {
     }
 }
 
-export async function navigateTo(rootId, relPath) {
+function applyLocation(rootId, relPath) {
     STATE.currentRoot = rootId;
     STATE.currentPath = relPath;
     STATE.selected.clear();
     STATE.anchorName = null;
     resetFilter();
-    try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {}
+    if (rootId) { try { localStorage.setItem("filemanaty.lastRoot", rootId); } catch {} }
     highlightTab();
     updateWritableUI();
-    await refresh();   // refresh() re-renders the tree too
+    syncFavoriteButton();
+}
+
+export async function navigateTo(rootId, relPath) {
+    const prev = { root: STATE.currentRoot, path: STATE.currentPath };
+    applyLocation(rootId, relPath);
+    try {
+        await refresh();   // refresh() re-renders the tree too
+    } catch (e) {
+        // The destination is gone — renamed or deleted from another tab, or a
+        // stale favorite. Go back to where we were instead of leaving the panel
+        // pointing at a folder that is not there: every caller but one is a
+        // plain click handler with nowhere to put an error.
+        applyLocation(prev.root, prev.path);
+        rerender();
+        toast(e.message || "That folder is gone", "error");
+    }
+}
+
+// The star reflects the folder on screen, so it doubles as "is this one saved?".
+export function syncFavoriteButton() {
+    const btn = document.getElementById("fm-fav");
+    if (!btn) return;
+    const on = isFavorite(loadFavorites(), STATE.currentRoot, STATE.currentPath);
+    btn.textContent = on ? "★" : "☆";
+    btn.title = on ? "Remove this folder from favorites" : "Add this folder to favorites";
+    btn.setAttribute("aria-label", btn.title);
+}
+
+function actFavorite() {
+    if (!STATE.currentRoot) return;
+    saveFavorites(toggleIn(loadFavorites(), STATE.currentRoot, STATE.currentPath));
+    syncFavoriteButton();
+    renderTree().catch((e) => console.error("filemanaty tree render failed:", e));
 }
 
 // Disable write actions in the toolbar when the current root is read-only.
@@ -499,6 +534,7 @@ async function onToolbarAction(act) {
         if (act === "paste") return await doPaste();
         if (act === "delete") return await actDelete(false);
         if (act === "basket") return addSelection();
+        if (act === "favorite") return actFavorite();
         if (act === "trash") return await trashView(() => refresh());
     } catch (e) {
         console.error("filemanaty action failed:", e);
