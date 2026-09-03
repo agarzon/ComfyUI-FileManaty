@@ -34,31 +34,37 @@ function renderFavorites(host) {
     host.appendChild(box);
 }
 
+// Two real buttons side by side rather than a clickable div: focus, Enter and
+// Space, and the announced role all come free, and neither swallows the other's
+// click the way a nested button would.
 function favoriteRow(f) {
     const active = STATE.currentRoot === f.root && STATE.currentPath === f.path;
+    const full = f.path ? `${rootLabel(f.root)} / ${f.path}` : rootLabel(f.root);
     const row = document.createElement("div");
-    row.style.cssText = `display:flex;align-items:center;gap:4px;padding:3px 4px 3px 6px;cursor:pointer;border-radius:4px;white-space:nowrap;overflow:hidden;${active ? "background:rgba(120,160,255,.25)" : ""}`;
+    row.style.cssText = `display:flex;align-items:center;border-radius:4px;${active ? "background:rgba(120,160,255,.25)" : ""}`;
 
-    const label = document.createElement("span");
-    label.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;";
-    label.textContent = "★ " + (f.path ? f.path.split("/").pop() : rootLabel(f.root));
-    row.title = f.path ? `${rootLabel(f.root)} / ${f.path}` : rootLabel(f.root);
-    row.appendChild(label);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.textContent = "★ " + (f.path ? f.path.split("/").pop() : rootLabel(f.root));
+    open.title = full;
+    open.setAttribute("aria-label", `Open ${full}`);
+    if (active) open.setAttribute("aria-current", "true");
+    open.style.cssText = "flex:1;min-width:0;text-align:left;background:none;border:0;color:inherit;font:inherit;cursor:pointer;padding:3px 4px 3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+    open.onclick = () => navigateTo(f.root, f.path);
+    row.appendChild(open);
 
     const remove = document.createElement("button");
+    remove.type = "button";
     remove.textContent = "✕";
     remove.title = "Remove from favorites";
-    remove.setAttribute("aria-label", `Remove ${row.title} from favorites`);
-    remove.style.cssText = "background:none;border:0;color:var(--fm-text-muted);cursor:pointer;padding:0 2px;line-height:1;font-size:11px";
-    remove.onclick = (e) => {
-        e.stopPropagation();
+    remove.setAttribute("aria-label", `Remove ${full} from favorites`);
+    remove.style.cssText = "flex:none;background:none;border:0;color:var(--fm-text-muted);cursor:pointer;padding:0 4px;line-height:1;font-size:11px";
+    remove.onclick = () => {
         saveFavorites(toggleIn(loadFavorites(), f.root, f.path));
         syncFavoriteButton();
         renderTree();
     };
     row.appendChild(remove);
-
-    row.onclick = () => navigateTo(f.root, f.path);
     return row;
 }
 

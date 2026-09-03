@@ -192,7 +192,7 @@ function buildOverlay() {
         <input id="fm-dir-input" type="file" multiple webkitdirectory style="display:none">
         <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
             <span id="fm-breadcrumb"></span>
-            <button id="fm-fav" class="fm-tb" data-act="favorite" style="padding:4px 8px">☆</button>
+            <button id="fm-fav" class="fm-tb" data-act="favorite" title="Add this folder to favorites" aria-label="Add this folder to favorites" style="padding:4px 8px">☆</button>
             <input id="fm-search-input" class="fm-search" type="text" placeholder="Filter…" autocomplete="off">
             <button id="fm-search-clear" class="fm-tb" title="Clear filter" style="padding:4px 8px">✕</button>
             <select id="fm-type-filter" class="fm-search">
