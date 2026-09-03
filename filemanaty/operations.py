@@ -11,6 +11,7 @@ import json
 import os
 import secrets
 import shutil
+import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -266,6 +267,41 @@ def delete_permanent(item: Path) -> None:
         shutil.rmtree(item)
     else:
         item.unlink()
+
+
+def write_zip(root: Path, items: list[Path], dest: Path) -> None:
+    """Zip ``items`` into ``dest``, naming entries relative to ``root`` so the
+    folder structure the user sees is the structure they unpack.
+
+    Directories are walked with os.walk, which does not follow symlinked
+    directories — that both rules out traversal loops and keeps the archive
+    inside the root. Files reached through a symlink are containment-checked
+    for the same reason: /download refuses to serve outside the root, and a zip
+    must not become the way around it. Hidden names are skipped at every level,
+    matching the rest of the non-listing endpoints, which also excludes the
+    trash directory for free.
+
+    ponytail: no size ceiling — a big enough selection can fill the temp
+    filesystem, and the caller surfaces the write error. Add a byte budget if
+    that stops being theoretical.
+    """
+    root = root.resolve()
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+        for item in items:
+            if item.is_file():
+                zf.write(item, item.resolve().relative_to(root).as_posix())
+                continue
+            for dirpath, dirnames, filenames in os.walk(item):
+                dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+                here = Path(dirpath)
+                for name in sorted(filenames):
+                    child = here / name
+                    if name.startswith("."):
+                        continue
+                    resolved = child.resolve()
+                    if not resolved.is_relative_to(root):
+                        continue
+                    zf.write(child, resolved.relative_to(root).as_posix())
 
 
 def trash_meta(root: Path, tid: str) -> dict:

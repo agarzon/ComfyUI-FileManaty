@@ -54,6 +54,14 @@ export function downloadURL(rootId, relPath) {
     return `${BASE}/download?${q.toString()}`;
 }
 
+// One `path` param per item, so this URL grows with the selection; the server
+// caps the count rather than letting the request line overflow.
+export function zipURL(rootId, relPaths) {
+    const q = new URLSearchParams({ root: rootId });
+    for (const p of relPaths) q.append("path", p);
+    return `${BASE}/zip?${q.toString()}`;
+}
+
 export async function fetchMetadata(rootId, relPath) {
     const q = new URLSearchParams({ root: rootId, path: relPath });
     return getJSON(`${BASE}/metadata?${q.toString()}`);

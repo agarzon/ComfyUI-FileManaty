@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -1347,3 +1348,145 @@ async def test_metadata_missing_param_returns_400(client_factory):
     resp = await client.get("/filemanaty/api/v1/metadata?root=t")
     assert resp.status == 400
     assert (await resp.json())["error"]["code"] == "BAD_REQUEST"
+
+
+def _zip_names(payload: bytes) -> list[str]:
+    with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+        return sorted(zf.namelist())
+
+
+async def test_zip_bundles_a_multi_selection(client_factory, tmp_root):
+    client = await client_factory()
+    resp = await client.get(
+        "/filemanaty/api/v1/zip?root=t&path=top.txt&path=sub/nested.txt")
+    assert resp.status == 200
+    assert resp.headers["Content-Type"] == "application/zip"
+    assert "attachment;" in resp.headers["Content-Disposition"]
+    body = await resp.read()
+    assert _zip_names(body) == ["sub/nested.txt", "top.txt"]
+
+
+async def test_zip_sets_content_length_so_the_browser_can_show_progress(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=top.txt")
+    assert resp.status == 200
+    assert resp.headers.get("Transfer-Encoding") is None
+    assert int(resp.headers["Content-Length"]) == len(await resp.read())
+
+
+async def test_zip_walks_a_directory_and_keeps_its_shape(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=sub")
+    assert resp.status == 200
+    assert _zip_names(await resp.read()) == ["sub/inner/deep.txt", "sub/nested.txt"]
+
+
+async def test_zip_names_a_single_item_after_it(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=sub")
+    assert "sub.zip" in resp.headers["Content-Disposition"]
+
+
+async def test_zip_skips_hidden_files_inside_a_directory(client_factory, tmp_root):
+    (tmp_root / "sub" / ".DS_Store").write_text("junk")
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=sub")
+    assert ".DS_Store" not in " ".join(_zip_names(await resp.read()))
+
+
+async def test_zip_leaves_out_a_symlink_escaping_the_root(client_factory, tmp_root, outside_dir):
+    os.symlink(outside_dir / "secret.txt", tmp_root / "sub" / "leak.txt")
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=sub")
+    assert resp.status == 200
+    assert "sub/leak.txt" not in _zip_names(await resp.read())
+
+
+async def test_zip_refuses_a_hidden_target(client_factory, tmp_root):
+    (tmp_root / ".secret").mkdir()
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=.secret")
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "ACCESS_DENIED"
+
+
+async def test_zip_refuses_the_trash(client_factory, tmp_root):
+    (tmp_root / ".filemanaty_trash").mkdir()
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=.filemanaty_trash")
+    assert resp.status == 403
+
+
+async def test_zip_refuses_an_escape(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=../escape")
+    assert resp.status == 403
+    assert (await resp.json())["error"]["code"] == "ACCESS_DENIED"
+
+
+async def test_zip_missing_item_returns_404(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=top.txt&path=nope.txt")
+    assert resp.status == 404
+    assert (await resp.json())["error"]["code"] == "NOT_FOUND"
+
+
+async def test_zip_without_paths_returns_400(client_factory):
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t")
+    assert resp.status == 400
+    assert (await resp.json())["error"]["code"] == "BAD_REQUEST"
+
+
+async def test_zip_refuses_more_items_than_the_cap(client_factory):
+    client = await client_factory()
+    paths = "&".join(f"path=top.txt" for _ in range(api_module.MAX_ZIP_ITEMS + 1))
+    resp = await client.get(f"/filemanaty/api/v1/zip?root=t&{paths}")
+    assert resp.status == 400
+
+
+async def test_zip_works_on_a_read_only_root(ro_rw_client):
+    """Zipping only reads, so a browse-only root is fair game."""
+    client = await ro_rw_client()
+    resp = await client.get("/filemanaty/api/v1/zip?root=ro&path=top.txt")
+    assert resp.status == 200
+    assert _zip_names(await resp.read()) == ["top.txt"]
+
+
+async def test_zip_leaves_no_temp_file_behind(client_factory, tmp_path_factory, monkeypatch):
+    import asyncio as _asyncio
+    import tempfile as _tempfile
+    # A private temp dir, so a parallel run or another FileManaty cannot drop a
+    # matching file into the assertion window.
+    tmpdir = tmp_path_factory.mktemp("ziptmp")
+    monkeypatch.setattr(_tempfile, "tempdir", str(tmpdir))
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=sub")
+    assert resp.status == 200
+    await resp.read()
+    # The client sees the last byte before the handler's finally has run.
+    for _ in range(50):
+        if not list(tmpdir.iterdir()):
+            break
+        await _asyncio.sleep(0.02)
+    assert list(tmpdir.iterdir()) == []
+
+
+async def test_zip_temp_archive_is_not_world_readable(client_factory, tmp_path_factory, monkeypatch):
+    """The archive can hold anything in the root, so a shared temp dir must not
+    expose it to other local users while it is being built."""
+    import tempfile as _tempfile
+    tmpdir = tmp_path_factory.mktemp("ziptmp")
+    monkeypatch.setattr(_tempfile, "tempdir", str(tmpdir))
+    seen: list[int] = []
+    real_write_zip = api_module.ops.write_zip
+
+    def spy(root, items, dest):
+        seen.append(dest.stat().st_mode & 0o777)
+        return real_write_zip(root, items, dest)
+
+    monkeypatch.setattr(api_module.ops, "write_zip", spy)
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=top.txt")
+    await resp.read()
+    assert seen == [0o600]

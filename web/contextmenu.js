@@ -46,8 +46,12 @@ export function attachContextMenu(actions) {
                 { label: "Add to basket", onClick: actions.basket },
                 { separator: true },
             ];
-            if (entry && entry.type === "file") {
+            if (entry && entry.type === "file" && STATE.selected.size === 1) {
                 items.push({ label: "Download", onClick: () => window.open(downloadURL(STATE.currentRoot, childPathOf(name)), "_blank") });
+                items.push({ separator: true });
+            } else {
+                // Folders and multi-selections have no single file to hand over.
+                items.push({ label: "Download as ZIP", onClick: actions.zip });
                 items.push({ separator: true });
             }
             items.push({ label: "Delete → Trash", danger: true, onClick: () => actions.del(false) });
