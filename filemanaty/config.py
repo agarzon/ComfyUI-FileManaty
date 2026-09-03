@@ -129,18 +129,22 @@ def _parse_config(raw: dict, base_dir: Path) -> Config:
             raise _ConfigError(f"root id {rid!r} does not match {_ID_RE.pattern}")
         if rid in seen_ids:
             raise _ConfigError(f"duplicate root id: {rid}")
+        # Claimed before the path is tried, so a duplicate id is rejected whether
+        # or not the entry that used it first turned out to be mountable.
+        seen_ids.add(rid)
         # `/` keeps an absolute path_str as-is and joins a relative one onto
         # base_dir, so both spellings work without branching on either.
+        # ValueError joins OSError because a NUL byte in the path raises that
+        # instead, and nothing here may escape: this runs at import time, where
+        # an exception takes ComfyUI's whole custom-node load down with it.
         try:
             resolved = (base_dir / path_str).resolve(strict=True)
-        except OSError as exc:
-            log.error("filemanaty: skipping root %r — path does not exist: %r (%s)",
-                      rid, path_str, exc)
+        except (OSError, ValueError) as exc:
+            log.error("filemanaty: skipping root %r — unusable path %r (%s)", rid, path_str, exc)
             continue
         if not resolved.is_dir():
             log.error("filemanaty: skipping root %r — path is not a directory: %r", rid, path_str)
             continue
-        seen_ids.add(rid)
         writable = bool(entry.get("writable", True))
         roots.append(RootConfig(id=rid, label=label, path=resolved, writable=writable))
 

@@ -386,17 +386,13 @@ def test_default_config_skips_workflows_when_dir_uncreatable(tmp_path, caplog):
     assert "could not mount" in caplog.text.lower()
 
 
-def _write(cfg_file: Path, roots: list[dict]) -> None:
-    cfg_file.write_text(json.dumps({"roots": roots}))
-
-
 def test_relative_root_path_resolves_against_base_dir(tmp_path):
     """A portable install lives on whatever drive it lives on, so one config
     file has to work without naming it."""
     install = tmp_path / "ComfyUI"
     (install / "models").mkdir(parents=True)
     cfg_file = tmp_path / "config.json"
-    _write(cfg_file, [{"id": "models", "label": "Models", "path": "models"}])
+    _write_cfg(cfg_file, {"roots": [{"id": "models", "label": "Models", "path": "models"}]})
 
     cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=install)
 
@@ -411,7 +407,7 @@ def test_absolute_root_path_ignores_base_dir(tmp_path):
     install = tmp_path / "ComfyUI"
     install.mkdir()
     cfg_file = tmp_path / "config.json"
-    _write(cfg_file, [{"id": "m", "label": "M", "path": str(elsewhere)}])
+    _write_cfg(cfg_file, {"roots": [{"id": "m", "label": "M", "path": str(elsewhere)}]})
 
     cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=install)
 
@@ -425,10 +421,10 @@ def test_unmountable_root_is_skipped_and_its_siblings_survive(tmp_path, caplog):
     good = tmp_path / "good"
     good.mkdir()
     cfg_file = tmp_path / "config.json"
-    _write(cfg_file, [
+    _write_cfg(cfg_file, {"roots": [
         {"id": "good", "label": "Good", "path": str(good)},
         {"id": "models", "label": "Models", "path": str(tmp_path / "D_drive_only")},
-    ])
+    ]})
 
     with caplog.at_level("ERROR"):
         cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=tmp_path)
@@ -444,10 +440,10 @@ def test_root_path_pointing_at_a_file_is_skipped(tmp_path, caplog):
     afile = tmp_path / "notadir.txt"
     afile.write_text("x")
     cfg_file = tmp_path / "config.json"
-    _write(cfg_file, [
+    _write_cfg(cfg_file, {"roots": [
         {"id": "good", "label": "Good", "path": str(good)},
         {"id": "bad", "label": "Bad", "path": str(afile)},
-    ])
+    ]})
 
     with caplog.at_level("ERROR"):
         cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=tmp_path)
@@ -464,3 +460,40 @@ def test_malformed_json_still_falls_back_wholesale(tmp_path):
     cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=tmp_path)
 
     assert [r.id for r in cfg.roots] == ["outputs", "inputs"]
+
+
+def test_duplicate_root_id_is_rejected_even_if_the_first_one_is_unmountable(tmp_path, caplog):
+    """The id is claimed before the path is tried, so 'unique' does not quietly
+    become 'unique among the roots that happened to mount'."""
+    good = tmp_path / "good"
+    good.mkdir()
+    cfg_file = tmp_path / "config.json"
+    _write_cfg(cfg_file, {"roots": [
+        {"id": "models", "label": "First", "path": str(tmp_path / "gone")},
+        {"id": "models", "label": "Second", "path": str(good)},
+    ]})
+
+    with caplog.at_level("ERROR", logger="filemanaty"):
+        cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=tmp_path)
+
+    # duplicate id is structural -> whole file rejected, defaults stand
+    assert [r.id for r in cfg.roots] == ["outputs", "inputs"]
+    assert "duplicate root id" in caplog.text
+
+
+def test_root_path_with_a_nul_byte_is_skipped_not_raised(tmp_path, caplog):
+    """A NUL raises ValueError, not OSError. This parses at ComfyUI import time,
+    so anything that escapes here takes the whole custom-node load down."""
+    good = tmp_path / "good"
+    good.mkdir()
+    cfg_file = tmp_path / "config.json"
+    _write_cfg(cfg_file, {"roots": [
+        {"id": "good", "label": "Good", "path": str(good)},
+        {"id": "nul", "label": "Nul", "path": "bad\x00path"},
+    ]})
+
+    with caplog.at_level("ERROR", logger="filemanaty"):
+        cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=tmp_path)
+
+    assert [r.id for r in cfg.roots] == ["good"]
+    assert "skipping root 'nul'" in caplog.text
