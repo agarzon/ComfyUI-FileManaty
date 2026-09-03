@@ -23,8 +23,10 @@ const DEFAULTS = {
     [KEYS.SHOW_THUMBNAILS]: true,
     [KEYS.GRID_DENSITY]: "normal",
     [KEYS.THUMBNAIL_SIZE]: "medium",
-    [KEYS.SORT_FIELD]: "name",
-    [KEYS.SORT_ORDER]: "asc",
+    // Newest first: this is a browser for generated output, and the file you
+    // want is almost always the one that just appeared.
+    [KEYS.SORT_FIELD]: "mtime",
+    [KEYS.SORT_ORDER]: "desc",
     [KEYS.SORT_FOLDERS_FIRST]: true,
     [KEYS.DEFAULT_ROOT]: "Last used",
     [KEYS.CONFIRM_ON_DELETE]: true,

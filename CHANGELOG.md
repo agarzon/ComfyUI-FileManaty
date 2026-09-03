@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.19.0 — 2026-09-03
+
+### Added
+
+- **`roots[].path` can be relative to your ComfyUI install.** `"path": "models"` resolves to
+  `D:\ComfyUI\models` on a portable install and `/opt/ComfyUI/models` in a container, so one
+  config file survives being moved between machines and drives. Absolute paths are unchanged.
+
+  This also removes a trap: a relative path used to resolve against whatever directory ComfyUI
+  happened to be *launched from*, so a config that worked could break on the next start.
+
+### Fixed
+
+- **One bad root no longer discards the whole config file.** A path that did not resolve — a drive
+  letter from another machine, a folder not yet created — failed the entire config, and FileManaty
+  quietly fell back to auto-mounting `output/` and `input/`. The result looked exactly like the
+  config file had never been read, which is a miserable thing to debug. Each unmountable root is
+  now skipped and named in the log (`skipping root 'models' — path does not exist: …`) and the rest
+  of the file still loads. A file that is not valid JSON still falls back wholesale — there is
+  nothing to salvage there — but once it parses, FileManaty never silently substitutes roots you
+  did not ask for.
+
+### Changed
+
+- **Sorting defaults to newest first** (date, descending) instead of name, ascending. This is a
+  browser for generated output and the file you want is almost always the one that just appeared.
+  Only affects fresh installs — an existing sort preference is left alone.
+
 ## v0.18.1 — 2026-09-03
 
 ### Changed

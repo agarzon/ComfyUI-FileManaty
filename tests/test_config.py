@@ -207,7 +207,9 @@ def test_invalid_root_id_falls_back_to_defaults(tmp_path, caplog):
     assert "invalid config" in caplog.text
 
 
-def test_missing_root_path_falls_back(tmp_path, caplog):
+def test_missing_root_path_is_skipped_not_substituted(tmp_path, caplog):
+    """Used to fall back to the auto-mount defaults, which made a wrong path
+    look like the config had never been read. The root is skipped and named."""
     outputs = tmp_path / "outputs"
     outputs.mkdir()
     cfg_file = tmp_path / "config.json"
@@ -218,8 +220,9 @@ def test_missing_root_path_falls_back(tmp_path, caplog):
     with caplog.at_level("ERROR", logger="filemanaty"):
         cfg = load_config(cfg_file, outputs, outputs)
 
-    assert [r.id for r in cfg.roots] == ["outputs", "inputs"]  # defaults
-    assert "invalid config" in caplog.text
+    assert cfg.roots == ()
+    assert "skipping root 'ghost'" in caplog.text
+    assert "no root in the config file could be mounted" in caplog.text
 
 
 def test_empty_roots_list_accepted_with_warning(tmp_path, caplog):
@@ -381,3 +384,83 @@ def test_default_config_skips_workflows_when_dir_uncreatable(tmp_path, caplog):
 
     assert [r.id for r in cfg.roots] == ["outputs", "inputs"]
     assert "could not mount" in caplog.text.lower()
+
+
+def _write(cfg_file: Path, roots: list[dict]) -> None:
+    cfg_file.write_text(json.dumps({"roots": roots}))
+
+
+def test_relative_root_path_resolves_against_base_dir(tmp_path):
+    """A portable install lives on whatever drive it lives on, so one config
+    file has to work without naming it."""
+    install = tmp_path / "ComfyUI"
+    (install / "models").mkdir(parents=True)
+    cfg_file = tmp_path / "config.json"
+    _write(cfg_file, [{"id": "models", "label": "Models", "path": "models"}])
+
+    cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=install)
+
+    assert [r.id for r in cfg.roots] == ["models"]
+    assert cfg.roots[0].path == (install / "models").resolve()
+
+
+def test_absolute_root_path_ignores_base_dir(tmp_path):
+    """Joining a relative path onto base_dir must not disturb absolute ones."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    install = tmp_path / "ComfyUI"
+    install.mkdir()
+    cfg_file = tmp_path / "config.json"
+    _write(cfg_file, [{"id": "m", "label": "M", "path": str(elsewhere)}])
+
+    cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=install)
+
+    assert cfg.roots[0].path == elsewhere.resolve()
+
+
+def test_unmountable_root_is_skipped_and_its_siblings_survive(tmp_path, caplog):
+    """The bug this fixes: one bad path used to discard the entire config file
+    and silently fall back to auto-mount defaults, which reads as 'my config
+    was never loaded'."""
+    good = tmp_path / "good"
+    good.mkdir()
+    cfg_file = tmp_path / "config.json"
+    _write(cfg_file, [
+        {"id": "good", "label": "Good", "path": str(good)},
+        {"id": "models", "label": "Models", "path": str(tmp_path / "D_drive_only")},
+    ])
+
+    with caplog.at_level("ERROR"):
+        cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=tmp_path)
+
+    assert [r.id for r in cfg.roots] == ["good"]
+    assert "skipping root 'models'" in caplog.text
+    assert "outputs" not in [r.id for r in cfg.roots]   # no silent fallback
+
+
+def test_root_path_pointing_at_a_file_is_skipped(tmp_path, caplog):
+    good = tmp_path / "good"
+    good.mkdir()
+    afile = tmp_path / "notadir.txt"
+    afile.write_text("x")
+    cfg_file = tmp_path / "config.json"
+    _write(cfg_file, [
+        {"id": "good", "label": "Good", "path": str(good)},
+        {"id": "bad", "label": "Bad", "path": str(afile)},
+    ])
+
+    with caplog.at_level("ERROR"):
+        cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=tmp_path)
+
+    assert [r.id for r in cfg.roots] == ["good"]
+    assert "not a directory" in caplog.text
+
+
+def test_malformed_json_still_falls_back_wholesale(tmp_path):
+    """A file that is not JSON has nothing to salvage — defaults are correct there."""
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text("{ not json")
+
+    cfg = load_config(cfg_file, tmp_path, tmp_path, base_dir=tmp_path)
+
+    assert [r.id for r in cfg.roots] == ["outputs", "inputs"]

@@ -70,8 +70,15 @@ def load_config(
     default_output_dir: Path,
     default_input_dir: Path,
     default_workflows_dir: Path | None = None,
+    base_dir: Path | None = None,
 ) -> Config:
-    """Load config from ``config_path`` or synthesize defaults if absent."""
+    """Load config from ``config_path`` or synthesize defaults if absent.
+
+    ``base_dir`` is what a relative ``roots[].path`` resolves against — api.py
+    passes ComfyUI's install directory, so one config file works on any machine
+    and any drive. Without it a relative path resolves against the working
+    directory, which is whatever ComfyUI happened to be launched from.
+    """
     if not config_path.exists():
         log.info("filemanaty: no config at %s, using auto-mount defaults", config_path)
         return _default_config(default_output_dir, default_input_dir, default_workflows_dir)
@@ -84,7 +91,7 @@ def load_config(
         return _default_config(default_output_dir, default_input_dir, default_workflows_dir)
 
     try:
-        return _parse_config(raw)
+        return _parse_config(raw, base_dir or Path.cwd())
     except _ConfigError as exc:
         log.error("filemanaty: invalid config at %s: %s; using defaults", config_path, exc)
         return _default_config(default_output_dir, default_input_dir, default_workflows_dir)
@@ -94,7 +101,7 @@ class _ConfigError(Exception):
     """Raised by _parse_config when the input is structurally invalid."""
 
 
-def _parse_config(raw: dict) -> Config:
+def _parse_config(raw: dict, base_dir: Path) -> Config:
     if not isinstance(raw, dict):
         raise _ConfigError("top-level must be an object")
     roots_raw = raw.get("roots", [])
@@ -104,6 +111,10 @@ def _parse_config(raw: dict) -> Config:
     if len(roots_raw) == 0:
         log.warning("filemanaty: no roots configured in config file; UI will be empty")
 
+    # A root that cannot be mounted is skipped and named in the log; the rest of
+    # the file still stands. Rejecting the whole config over one bad path and
+    # quietly serving auto-mount defaults instead looks like the config was
+    # never read, which is a miserable thing to debug.
     roots: list[RootConfig] = []
     seen_ids: set[str] = set()
     for entry in roots_raw:
@@ -118,15 +129,23 @@ def _parse_config(raw: dict) -> Config:
             raise _ConfigError(f"root id {rid!r} does not match {_ID_RE.pattern}")
         if rid in seen_ids:
             raise _ConfigError(f"duplicate root id: {rid}")
+        # `/` keeps an absolute path_str as-is and joins a relative one onto
+        # base_dir, so both spellings work without branching on either.
         try:
-            resolved = Path(path_str).resolve(strict=True)
+            resolved = (base_dir / path_str).resolve(strict=True)
         except OSError as exc:
-            raise _ConfigError(f"root path does not exist: {path_str!r} ({exc})")
+            log.error("filemanaty: skipping root %r — path does not exist: %r (%s)",
+                      rid, path_str, exc)
+            continue
         if not resolved.is_dir():
-            raise _ConfigError(f"root path is not a directory: {path_str!r}")
+            log.error("filemanaty: skipping root %r — path is not a directory: %r", rid, path_str)
+            continue
         seen_ids.add(rid)
         writable = bool(entry.get("writable", True))
         roots.append(RootConfig(id=rid, label=label, path=resolved, writable=writable))
+
+    if roots_raw and not roots:
+        log.error("filemanaty: no root in the config file could be mounted; UI will be empty")
 
     files_raw = raw.get("files", {})
     if not isinstance(files_raw, dict):

@@ -3,13 +3,18 @@
     {
       "id": "outputs",
       "label": "Outputs",
-      "path": "/absolute/path/to/ComfyUI/output"
+      "path": "output"
     },
     {
-      "id": "inputs",
-      "label": "Inputs",
-      "path": "/absolute/path/to/ComfyUI/input",
+      "id": "models",
+      "label": "Models",
+      "path": "models",
       "writable": false
+    },
+    {
+      "id": "elsewhere",
+      "label": "Elsewhere",
+      "path": "/absolute/paths/still/work"
     }
   ],
   "files": {
