@@ -88,15 +88,62 @@ For security and capacity limits the server is the authority. Drop a `config.jso
 | `files.video_extensions` | no | mp4, webm, mkv, mov | Get thumbnails (decoded server-side) + played inline where the browser supports the container |
 | `files.audio_extensions` | no | mp3, wav, ogg, m4a, flac | Played inline (HTML5 audio) |
 | `thumbnails.max_dimension` | no | `320` | Longest side, `64`–`1024` |
-| `write.max_upload_mb` | no | `1024` | Max size per uploaded file, `1`–`1048576` |
+| `write.max_upload_mb` | no | `1024` | Max size per uploaded file, `1`–`1048576` (1 TB). See [Uploading big files](#uploading-big-files) |
 
-If the config is malformed or invalid, FileManaty logs a clear error and falls back to the auto-mount defaults — **ComfyUI never crashes**.
+If the config is malformed or invalid, FileManaty logs a clear error and falls back to the auto-mount defaults — **ComfyUI never crashes**. If the file is valid but a single root's path doesn't resolve, only that root is skipped (with an error naming it in the log) and the rest still loads.
 
-By default, FileManaty also auto-mounts your ComfyUI **Workflows** folder
-(`<user-directory>/default/workflows`) as a **writable** root, so you can browse, preview, and
-manage your saved workflow `.json` files (and open them with *Load on canvas*). The folder is
-created if it doesn't exist yet. A custom `config.json` replaces these auto-mount defaults, so if
-you use one, add a workflows root explicitly by its path.
+#### A portable config
+
+Paths relative to your ComfyUI install work on any machine and any drive, so the same file can
+follow a portable install around:
+
+```json
+{
+  "roots": [
+    { "id": "outputs",   "label": "Outputs",   "path": "output" },
+    { "id": "inputs",    "label": "Inputs",    "path": "input" },
+    { "id": "workflows", "label": "Workflows", "path": "user/default/workflows" },
+    { "id": "models",    "label": "Models",    "path": "models", "writable": false },
+    { "id": "archive",   "label": "Archive",   "path": "/mnt/nas/renders" }
+  ]
+}
+```
+
+On a portable Windows install that mounts `D:\ComfyUI\output`, `D:\ComfyUI\models` and so on;
+`archive` shows that absolute paths still work when a root lives somewhere else entirely.
+
+**Three things that trip people up:**
+
+- **The moment a `config.json` exists, auto-mounting stops.** You have to list *every* root you
+  want, including outputs and inputs — they are not added on top of your file.
+- **Your workflows folder is `user/default/workflows`**, and a root from `config.json` will
+  **not create it**. Auto-mounting does (the folder often doesn't exist until ComfyUI's first
+  save), a configured root does not — so if you haven't saved a workflow yet you'll see
+  `skipping root 'workflows' — unusable path …` in the log. Save one workflow, or create the
+  folder once.
+- **If you launch ComfyUI with `--user-directory` elsewhere**, a hand-written
+  `user/default/workflows` won't follow it. Point that root at the real path instead.
+
+#### Uploading big files
+
+Models and LoRAs run to tens of gigabytes, and the default cap is 1 GB per file. Raise it:
+
+```json
+{ "write": { "max_upload_mb": 51200 } }
+```
+
+ComfyUI's own `--max-upload-size` (100 MB by default) does **not** apply here — FileManaty streams
+uploads in chunks rather than buffering the request body, so `write.max_upload_mb` is the only
+limit that matters. Before you rely on it for very large files:
+
+- **There is no resume.** An upload streams to a temporary file next to its destination and is
+  discarded if the connection drops, so a failure near the end costs the whole transfer.
+- **The cap is enforced as bytes arrive**, so a file over the limit is refused only after being
+  sent that far.
+- **Keep the destination's free space above the file size** — the temporary file lives there
+  until the upload completes.
+- **A reverse proxy in front of ComfyUI will have its own limit and timeout**, usually far
+  stricter (nginx defaults to 1 MB via `client_max_body_size`).
 
 ## 🔒 Security
 

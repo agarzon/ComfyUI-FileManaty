@@ -6,6 +6,16 @@
       "path": "output"
     },
     {
+      "id": "inputs",
+      "label": "Inputs",
+      "path": "input"
+    },
+    {
+      "id": "workflows",
+      "label": "Workflows",
+      "path": "user/default/workflows"
+    },
+    {
       "id": "models",
       "label": "Models",
       "path": "models",
