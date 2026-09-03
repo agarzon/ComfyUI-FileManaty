@@ -455,7 +455,12 @@ async def _zip(request: web.Request) -> web.Response:
         zip_name = f"{targets[0].parent.name or root.id}.zip"
 
     loop = asyncio.get_running_loop()
-    tmp = Path(tempfile.gettempdir()) / f"filemanaty-{secrets.token_hex(8)}.zip"
+    # mkstemp creates the file 0600, so the archive is not readable by other
+    # local users while it is being built in a shared temp directory.
+    fd, tmp_name = await loop.run_in_executor(
+        None, functools.partial(tempfile.mkstemp, prefix="filemanaty-", suffix=".zip"))
+    os.close(fd)
+    tmp = Path(tmp_name)
     try:
         try:
             await loop.run_in_executor(
@@ -479,7 +484,12 @@ async def _zip(request: web.Request) -> web.Response:
         await response.write_eof()
         return response
     finally:
-        await loop.run_in_executor(None, functools.partial(tmp.unlink, missing_ok=True))
+        # The archive is already on the wire by now; a temp file we cannot
+        # remove is a janitorial problem, not a reason to fail the download.
+        try:
+            await loop.run_in_executor(None, functools.partial(tmp.unlink, missing_ok=True))
+        except OSError as exc:
+            log.info("filemanaty: could not remove temp archive %s: %s", tmp, exc)
 
 
 async def _metadata(request: web.Request) -> web.Response:

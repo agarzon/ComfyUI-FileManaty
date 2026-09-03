@@ -1453,17 +1453,40 @@ async def test_zip_works_on_a_read_only_root(ro_rw_client):
     assert _zip_names(await resp.read()) == ["top.txt"]
 
 
-async def test_zip_leaves_no_temp_file_behind(client_factory):
+async def test_zip_leaves_no_temp_file_behind(client_factory, tmp_path_factory, monkeypatch):
     import asyncio as _asyncio
     import tempfile as _tempfile
-    tmpdir = Path(_tempfile.gettempdir())
-    before = set(tmpdir.glob("filemanaty-*.zip"))
+    # A private temp dir, so a parallel run or another FileManaty cannot drop a
+    # matching file into the assertion window.
+    tmpdir = tmp_path_factory.mktemp("ziptmp")
+    monkeypatch.setattr(_tempfile, "tempdir", str(tmpdir))
     client = await client_factory()
     resp = await client.get("/filemanaty/api/v1/zip?root=t&path=sub")
+    assert resp.status == 200
     await resp.read()
     # The client sees the last byte before the handler's finally has run.
     for _ in range(50):
-        if set(tmpdir.glob("filemanaty-*.zip")) == before:
+        if not list(tmpdir.iterdir()):
             break
         await _asyncio.sleep(0.02)
-    assert set(tmpdir.glob("filemanaty-*.zip")) == before
+    assert list(tmpdir.iterdir()) == []
+
+
+async def test_zip_temp_archive_is_not_world_readable(client_factory, tmp_path_factory, monkeypatch):
+    """The archive can hold anything in the root, so a shared temp dir must not
+    expose it to other local users while it is being built."""
+    import tempfile as _tempfile
+    tmpdir = tmp_path_factory.mktemp("ziptmp")
+    monkeypatch.setattr(_tempfile, "tempdir", str(tmpdir))
+    seen: list[int] = []
+    real_write_zip = api_module.ops.write_zip
+
+    def spy(root, items, dest):
+        seen.append(dest.stat().st_mode & 0o777)
+        return real_write_zip(root, items, dest)
+
+    monkeypatch.setattr(api_module.ops, "write_zip", spy)
+    client = await client_factory()
+    resp = await client.get("/filemanaty/api/v1/zip?root=t&path=top.txt")
+    await resp.read()
+    assert seen == [0o600]
