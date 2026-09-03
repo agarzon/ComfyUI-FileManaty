@@ -190,7 +190,7 @@ function buildOverlay() {
         <div id="fm-tabs" style="display:flex;gap:4px;padding:6px 14px;border-bottom:1px solid var(--fm-border);background:var(--fm-bg-elevated);"></div>
         <input id="fm-file-input" type="file" multiple style="display:none">
         <input id="fm-dir-input" type="file" multiple webkitdirectory style="display:none">
-        <div id="fm-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
+        <div id="fm-toolbar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--fm-border);font-size:12px;color:var(--fm-text-muted);">
             <span id="fm-breadcrumb"></span>
             <input id="fm-search-input" class="fm-search" type="text" placeholder="Filter…" autocomplete="off">
             <button id="fm-search-clear" class="fm-tb" title="Clear filter" style="padding:4px 8px">✕</button>

@@ -12,9 +12,11 @@
 
 ### Fixed
 
-- **Toolbar labels could break mid-button.** With enough buttons the row ran a few pixels over and
-  flex-shrink split labels across two lines rather than the row overflowing. Buttons no longer
-  shrink or wrap their text, and the filter box gives back the width to fit.
+- **Toolbar labels could break mid-button, and on a narrow window the last buttons were out of
+  reach.** With enough buttons the row ran a few pixels over and flex-shrink split labels across
+  two lines rather than the row overflowing. Buttons no longer shrink or wrap their text, the
+  filter box gives back the width to fit, and the toolbar wraps onto a second line instead of
+  running the rightmost controls off the edge of a window too narrow to hold them.
 
 ## v0.18.0 — 2026-09-03
 
